@@ -137,5 +137,15 @@ script Player {
         World.set_active(entity, true);
         Animation.play(entity, clip);
         Animation.restart(entity);
+
+        // The projected silhouettes use this pose's sheet and clock. Their
+        // parent controls visibility, so hiding the pose hides its shadow too.
+        var shadow_name = "Agnes Shadow " + clip;
+        if entity == this.turn { shadow_name = "Agnes Shadow turn"; }
+        for i in 0..9 {
+            let shadow = World.find(shadow_name + " " + i);
+            Animation.play(shadow, clip);
+            Animation.restart(shadow);
+        }
     }
 }
