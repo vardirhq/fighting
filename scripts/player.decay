@@ -1,0 +1,38 @@
+script Player {
+    @export let speed: f32 = 5.0;
+    var facing_right: bool = true;
+    var moving: bool = false;
+    var idle: Entity = null;
+    var walk: Entity = null;
+
+    fn start() {
+        this.idle = World.find("Agnes Idle");
+        this.walk = World.find("Agnes Walk");
+        show();
+    }
+
+    fn update(dt: f32) {
+        let dx = Input.axis("A", "D") + Input.axis("ArrowLeft", "ArrowRight");
+        let dy = Input.axis("S", "W") + Input.axis("ArrowDown", "ArrowUp");
+
+        this.moving = abs(dx) > 0.0 || abs(dy) > 0.0;
+        if dx > 0.0 { this.facing_right = true; }
+        if dx < 0.0 { this.facing_right = false; }
+
+        this.transform.position.x += dx * this.speed * dt;
+        this.transform.position.y += dy * this.speed * dt;
+        this.transform.position.x = max(-8.6, min(8.6, this.transform.position.x));
+        this.transform.position.y = max(-3.6, min(-1.0, this.transform.position.y));
+
+        let size = abs(this.transform.scale.x);
+        if this.facing_right { this.transform.scale.x = size; }
+        else { this.transform.scale.x = -size; }
+
+        show();
+    }
+
+    fn show() {
+        World.set_active(this.idle, !this.moving);
+        World.set_active(this.walk, this.moving);
+    }
+}

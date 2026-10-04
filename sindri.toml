@@ -1,0 +1,5 @@
+format_version = 1
+
+[project]
+name = "Family Fighter"
+main_scene = "main.scene.json"
