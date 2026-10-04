@@ -42,13 +42,6 @@ script Player {
         let wants_move = wants_left || wants_right;
         let attack = Input.just_pressed("Space") || Ui.is_pressed(this.attack_button);
 
-        // Movement is gameplay, not an animation reward. Keep translating while
-        // locomotion/turn clips play so input never leaves Agnes jogging in place.
-        if wants_move && this.state != 5.0 {
-            this.transform.position.x += move_x * this.speed * dt;
-            this.transform.position.x = max(-8.6, min(8.6, this.transform.position.x));
-        }
-
         // Attacks remain committed for now; locomotion transitions are cancellable.
         if this.state == 5.0 {
             if Animation.is_finished(this.shown) { to_idle(); }
@@ -79,6 +72,14 @@ script Player {
             if !wants_move { to_idle(); return; }
             if Animation.is_finished(this.shown) { begin_move(move_x); }
             return;
+        }
+
+        // Turning is a brief pivot in place. The turn branches above return
+        // before translation, including the frame that starts a new turn.
+        // Start, loop and stop clips still move immediately with held input.
+        if wants_move {
+            this.transform.position.x += move_x * this.speed * dt;
+            this.transform.position.x = max(-8.6, min(8.6, this.transform.position.x));
         }
 
         if this.state == 1.0 {
