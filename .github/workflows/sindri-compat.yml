@@ -1,0 +1,65 @@
+name: Sindri compatibility
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  external-project:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Fighting
+        uses: actions/checkout@v4
+        with:
+          path: fighting
+
+      - name: Read pinned Sindri revision
+        id: engine
+        shell: bash
+        run: echo "ref=$(tr -d '\r\n' < fighting/.sindri-engine)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out pinned Sindri
+        uses: actions/checkout@v4
+        with:
+          repository: vardirhq/sindri-engine
+          ref: ${{ steps.engine.outputs.ref }}
+          path: sindri-engine
+
+      - name: Install Sindri Rust toolchain
+        uses: dtolnay/rust-toolchain@1.95.0
+
+      - name: Install Sindri Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev
+
+      - name: Cache Sindri build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sindri-engine -> target
+          key: fighting-${{ steps.engine.outputs.ref }}
+
+      - name: Verify pinned editor builds
+        working-directory: sindri-engine
+        run: cargo check --package sindri-editor
+
+      - name: Type-check Fighting Decay
+        working-directory: sindri-engine
+        run: cargo run --package sindri-editor --bin decay-check -- ../fighting
+
+      - name: Export project from outside the Sindri repository
+        working-directory: sindri-engine
+        run: cargo run --package sindri-export --bin sindri-export -- ../fighting "$RUNNER_TEMP/fighting-export" --build-id "$GITHUB_SHA"
+
+      - name: Verify export contains gameplay and art
+        shell: bash
+        run: |
+          test -f "$RUNNER_TEMP/fighting-export/index.html"
+          find "$RUNNER_TEMP/fighting-export/assets" -type f -path '*/scripts/player.decay' -print -quit | grep -q .
+          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'file_000000006a5481f4b1ef532d54ba8a4a.png' -print -quit | grep -q .
+          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'pixellab-The-character-breathes-with-a--1791140864816.png' -print -quit | grep -q .
