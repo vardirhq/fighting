@@ -1,41 +1,125 @@
 script Player {
     @export let speed: f32 = 5.0;
     var facing_right: bool = true;
-    var moving: bool = false;
-    var idle: Entity = null;
-    var walk: Entity = null;
+    var state: f32 = 0.0;
+    var shown: Entity = null;
+    var idle_left: Entity = null;
+    var idle_right: Entity = null;
+    var start_left: Entity = null;
+    var start_right: Entity = null;
+    var move_left: Entity = null;
+    var move_right: Entity = null;
+    var stop_left: Entity = null;
+    var stop_right: Entity = null;
+    var turn: Entity = null;
+    var attack_left: Entity = null;
+    var attack_right: Entity = null;
+    var attack_button: Entity = null;
 
     fn start() {
-        this.idle = World.find("Agnes Idle");
-        this.walk = World.find("Agnes Walk");
-        show();
+        this.idle_left = World.find("Agnes Idle Left");
+        this.idle_right = World.find("Agnes Idle Right");
+        this.start_left = World.find("Agnes Start Left");
+        this.start_right = World.find("Agnes Start Right");
+        this.move_left = World.find("Agnes Move Left");
+        this.move_right = World.find("Agnes Move Right");
+        this.stop_left = World.find("Agnes Stop Left");
+        this.stop_right = World.find("Agnes Stop Right");
+        this.turn = World.find("Agnes Turn");
+        this.attack_left = World.find("Agnes Attack Left");
+        this.attack_right = World.find("Agnes Attack Right");
+        this.attack_button = World.find("Attack Button");
+        show(this.idle_right, "idle_right");
     }
 
     fn update(dt: f32) {
         let key_x = Input.axis("A", "D") + Input.axis("ArrowLeft", "ArrowRight");
         var move_x = key_x;
-        if Stick.held && abs(Stick.x) > abs(move_x) {
-            move_x = Stick.x;
-        }
+        if Stick.held && abs(Stick.x) > abs(move_x) { move_x = Stick.x; }
         move_x = max(-1.0, min(1.0, move_x));
+        let wants_left = move_x < -0.05;
+        let wants_right = move_x > 0.05;
+        let wants_move = wants_left || wants_right;
+        let attack = Input.just_pressed("Space") || Ui.is_pressed(this.attack_button);
 
-        this.moving = abs(move_x) > 0.05;
-        if move_x > 0.05 { this.facing_right = true; }
-        if move_x < -0.05 { this.facing_right = false; }
+        if this.state == 5.0 {
+            if Animation.is_finished(this.shown) { to_idle(); }
+            return;
+        }
 
-        this.transform.position.x += move_x * this.speed * dt;
-        this.transform.position.x = max(-8.6, min(8.6, this.transform.position.x));
+        if attack {
+            this.state = 5.0;
+            if this.facing_right { show(this.attack_right, "attack_right"); }
+            else { show(this.attack_left, "attack_left"); }
+            return;
+        }
 
-        // The source art faces left, so positive scale is left-facing.
-        let size = abs(this.transform.scale.x);
-        if this.facing_right { this.transform.scale.x = -size; }
-        else { this.transform.scale.x = size; }
+        if this.state == 4.0 {
+            if Animation.is_finished(this.shown) {
+                if wants_move { begin_move(move_x); }
+                else { to_idle(); }
+            }
+            return;
+        }
 
-        show();
+        if wants_left && this.facing_right {
+            this.facing_right = false;
+            this.state = 4.0;
+            show(this.turn, "right_to_left");
+            return;
+        }
+        if wants_right && !this.facing_right {
+            this.facing_right = true;
+            this.state = 4.0;
+            show(this.turn, "left_to_right");
+            return;
+        }
+
+        if this.state == 1.0 && Animation.is_finished(this.shown) {
+            this.state = 2.0;
+            if this.facing_right { show(this.move_right, "move_right"); }
+            else { show(this.move_left, "move_left"); }
+        }
+
+        if this.state == 3.0 {
+            if wants_move { begin_move(move_x); }
+            else if Animation.is_finished(this.shown) { to_idle(); }
+            return;
+        }
+
+        if wants_move {
+            if this.state == 0.0 { begin_move(move_x); }
+            this.transform.position.x += move_x * this.speed * dt;
+            this.transform.position.x = max(-8.6, min(8.6, this.transform.position.x));
+        } else if this.state == 1.0 || this.state == 2.0 {
+            this.state = 3.0;
+            if this.facing_right { show(this.stop_right, "stop_right"); }
+            else { show(this.stop_left, "stop_left"); }
+        }
     }
 
-    fn show() {
-        World.set_active(this.idle, !this.moving);
-        World.set_active(this.walk, this.moving);
+    fn begin_move(move_x: f32) {
+        this.state = 1.0;
+        if move_x > 0.0 {
+            this.facing_right = true;
+            show(this.start_right, "start_right");
+        } else {
+            this.facing_right = false;
+            show(this.start_left, "start_left");
+        }
+    }
+
+    fn to_idle() {
+        this.state = 0.0;
+        if this.facing_right { show(this.idle_right, "idle_right"); }
+        else { show(this.idle_left, "idle_left"); }
+    }
+
+    fn show(entity: Entity, clip: String) {
+        if this.shown != null { World.set_active(this.shown, false); }
+        this.shown = entity;
+        World.set_active(entity, true);
+        Animation.play(entity, clip);
+        Animation.restart(entity);
     }
 }

@@ -1,0 +1,5 @@
+{
+  "format_version": 1,
+  "anchor": "bottom",
+  "grid": { "columns": 3, "rows": 3, "names": ["move_right_0","move_right_1","move_right_2","move_right_3","move_right_4","move_right_5","move_right_6","move_right_7","move_right_8"] }
+}
