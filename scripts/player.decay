@@ -12,15 +12,25 @@ script Player {
     }
 
     fn update(dt: f32) {
-        let dx = Input.axis("A", "D") + Input.axis("ArrowLeft", "ArrowRight");
-        let dy = Input.axis("S", "W") + Input.axis("ArrowDown", "ArrowUp");
+        let keys = Vec2(
+            Input.axis("A", "D") + Input.axis("ArrowLeft", "ArrowRight"),
+            Input.axis("S", "W") + Input.axis("ArrowDown", "ArrowUp")
+        );
+        let thumb = Vec2(Stick.x, -Stick.y);
+        var move = keys;
+        if Stick.held && thumb.length > move.length {
+            move = thumb;
+        }
+        if move.length > 1.0 {
+            move = move.normalized;
+        }
 
-        this.moving = abs(dx) > 0.0 || abs(dy) > 0.0;
-        if dx > 0.0 { this.facing_right = true; }
-        if dx < 0.0 { this.facing_right = false; }
+        this.moving = move.length > 0.05;
+        if move.x > 0.05 { this.facing_right = true; }
+        if move.x < -0.05 { this.facing_right = false; }
 
-        this.transform.position.x += dx * this.speed * dt;
-        this.transform.position.y += dy * this.speed * dt;
+        this.transform.position.x += move.x * this.speed * dt;
+        this.transform.position.y += move.y * this.speed * dt;
         this.transform.position.x = max(-8.6, min(8.6, this.transform.position.x));
         this.transform.position.y = max(-3.6, min(-1.0, this.transform.position.y));
 
