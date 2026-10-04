@@ -1,0 +1,1 @@
+The Pages payload is structurally verified in pages.yml. A full Chromium smoke test should be added when Fighting carries the same Playwright browser tooling contract as the pinned Sindri revision.
