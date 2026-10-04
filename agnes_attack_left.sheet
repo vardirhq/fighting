@@ -1,0 +1,5 @@
+{
+  "format_version": 1,
+  "anchor": "bottom",
+  "grid": { "columns": 3, "rows": 3, "names": ["attack_left_0","attack_left_1","attack_left_2","attack_left_3","attack_left_4","attack_left_5","attack_left_6","attack_left_7","attack_left_8"] }
+}
