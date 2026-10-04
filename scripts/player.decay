@@ -42,8 +42,14 @@ script Player {
         let wants_move = wants_left || wants_right;
         let attack = Input.just_pressed("Space") || Ui.is_pressed(this.attack_button);
 
-        // Attacks are the one committed action. Locomotion transitions should never
-        // make controls feel sticky just because their pretty animation is unfinished.
+        // Movement is gameplay, not an animation reward. Keep translating while
+        // locomotion/turn clips play so input never leaves Agnes jogging in place.
+        if wants_move && this.state != 5.0 {
+            this.transform.position.x += move_x * this.speed * dt;
+            this.transform.position.x = max(-8.6, min(8.6, this.transform.position.x));
+        }
+
+        // Attacks remain committed for now; locomotion transitions are cancellable.
         if this.state == 5.0 {
             if Animation.is_finished(this.shown) { to_idle(); }
             return;
@@ -56,7 +62,6 @@ script Player {
             return;
         }
 
-        // Direction changes cancel starts/stops/walks immediately into the turn.
         if wants_left && this.facing_right {
             this.facing_right = false;
             this.state = 4.0;
@@ -71,21 +76,16 @@ script Player {
         }
 
         if this.state == 4.0 {
-            // Releasing during a turn cancels straight to the new facing idle.
             if !wants_move { to_idle(); return; }
             if Animation.is_finished(this.shown) { begin_move(move_x); }
             return;
         }
 
         if this.state == 1.0 {
-            // Releasing during the start transition goes straight into the authored
-            // stop transition rather than forcing the start animation to finish.
             if !wants_move {
                 begin_stop();
                 return;
             }
-            this.transform.position.x += move_x * this.speed * dt;
-            this.transform.position.x = max(-8.6, min(8.6, this.transform.position.x));
             if Animation.is_finished(this.shown) {
                 this.state = 2.0;
                 if this.facing_right { show(this.move_right, "move_right"); }
@@ -95,7 +95,6 @@ script Player {
         }
 
         if this.state == 3.0 {
-            // Starting again cancels the stop transition immediately.
             if wants_move { begin_move(move_x); }
             else if Animation.is_finished(this.shown) { to_idle(); }
             return;
@@ -103,8 +102,6 @@ script Player {
 
         if wants_move {
             if this.state == 0.0 { begin_move(move_x); }
-            this.transform.position.x += move_x * this.speed * dt;
-            this.transform.position.x = max(-8.6, min(8.6, this.transform.position.x));
         } else if this.state == 2.0 {
             begin_stop();
         }
