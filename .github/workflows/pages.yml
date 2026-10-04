@@ -3,6 +3,8 @@ name: Deploy web game
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -11,8 +13,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: fighting-pages-${{ github.event_name == 'pull_request' && github.head_ref || 'deploy' }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -37,6 +39,8 @@ jobs:
 
       - name: Install Sindri Rust toolchain
         uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          targets: wasm32-unknown-unknown
 
       - name: Install Linux build dependencies
         run: |
@@ -49,27 +53,56 @@ jobs:
           workspaces: sindri-engine -> target
           key: fighting-pages-${{ steps.engine.outputs.ref }}
 
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack@0.13.1
+
       - name: Type-check Fighting Decay
         working-directory: sindri-engine
         run: cargo run --quiet --package decay-lsp -- --check ../fighting
 
+      - name: Build Sindri browser host
+        working-directory: sindri-engine
+        run: wasm-pack build game --target web --release --out-dir pkg
+
       - name: Export Fighting for web
         working-directory: sindri-engine
-        run: cargo run --package sindri-export --bin sindri-export -- ../fighting "$RUNNER_TEMP/fighting-pages" --build-id "$GITHUB_SHA"
+        run: cargo run --quiet --package sindri-export --bin sindri-export -- ../fighting "$RUNNER_TEMP/fighting-pages" --base /fighting/ --build-id "${GITHUB_SHA:0:7}"
+
+      - name: Copy browser host into export
+        working-directory: sindri-engine
+        run: |
+          mkdir -p "$RUNNER_TEMP/fighting-pages/pkg"
+          cp -R game/pkg/. "$RUNNER_TEMP/fighting-pages/pkg/"
+          touch "$RUNNER_TEMP/fighting-pages/.nojekyll"
 
       - name: Verify web export
-        run: test -f "$RUNNER_TEMP/fighting-pages/index.html"
+        shell: bash
+        run: |
+          test -f "$RUNNER_TEMP/fighting-pages/index.html"
+          test -f "$RUNNER_TEMP/fighting-pages/assets/sindri.manifest.json"
+          test -f "$RUNNER_TEMP/fighting-pages/pkg/sindri_causeway.js"
+          test -f "$RUNNER_TEMP/fighting-pages/pkg/sindri_causeway_bg.wasm"
+          grep -q '<base href="/fighting/">' "$RUNNER_TEMP/fighting-pages/index.html"
+          grep -q '"kind": "scene"' "$RUNNER_TEMP/fighting-pages/assets/sindri.manifest.json"
+          grep -q '"kind": "script"' "$RUNNER_TEMP/fighting-pages/assets/sindri.manifest.json"
+          grep -q '"kind": "texture"' "$RUNNER_TEMP/fighting-pages/assets/sindri.manifest.json"
 
       - name: Configure Pages
-        uses: actions/configure-pages@v5
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v6
+        with:
+          enablement: true
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ runner.temp }}/fighting-pages
 
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -78,4 +111,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
