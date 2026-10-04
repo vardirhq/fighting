@@ -50,7 +50,7 @@ jobs:
 
       - name: Type-check Fighting Decay
         working-directory: sindri-engine
-        run: cargo run --package sindri-editor --bin decay-check -- ../fighting
+        run: cargo run --quiet --package decay-lsp -- --check ../fighting
 
       - name: Export project from outside the Sindri repository
         working-directory: sindri-engine
