@@ -1,0 +1,3 @@
+base=/fighting/
+host=pkg/sindri_causeway.js
+wasm=pkg/sindri_causeway_bg.wasm
