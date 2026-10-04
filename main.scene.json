@@ -30,16 +30,36 @@
       "name": "Agnes",
       "transform_3d": { "position": [-3.0, -2.9, 1.0], "rotation": [0.0, 0.0, 0.0, 1.0], "scale": [3.4, 3.4, 1.0] },
       "components": {
+        "sindri.script": { "source": "scripts/player.decay", "script": "Player", "properties": { "speed": 5.0 } }
+      }
+    },
+    {
+      "id": "agnes-idle",
+      "name": "Agnes Idle",
+      "parent": "agnes",
+      "transform_3d": { "position": [0.0, 0.0, 0.0], "rotation": [0.0, 0.0, 0.0, 1.0], "scale": [1.0, 1.0, 1.0] },
+      "components": {
         "sindri.sprite": { "texture": "pixellab-The-character-breathes-with-a--1791140864816.png#idle-0", "layer": 10 },
         "sindri.animation.sprite": {
-          "clips": {
-            "idle": { "frames": ["idle-0", "idle-1", "idle-2", "idle-3", "idle-4", "idle-5", "idle-6", "idle-7", "idle-8"], "seconds_per_frame": 0.11, "looping": true },
-            "walk": { "frames": ["walk-0", "walk-1", "walk-2", "walk-3", "walk-4", "walk-5", "walk-6", "walk-7", "walk-8"], "seconds_per_frame": 0.085, "looping": true }
-          },
+          "clips": { "idle": { "frames": ["idle-0", "idle-1", "idle-2", "idle-3", "idle-4", "idle-5", "idle-6", "idle-7", "idle-8"], "seconds_per_frame": 0.11, "looping": true } },
           "playing": "idle",
           "speed": 1.0
-        },
-        "sindri.script": { "source": "scripts/player.decay", "script": "Player", "properties": { "speed": 5.0 } }
+        }
+      }
+    },
+    {
+      "id": "agnes-walk",
+      "name": "Agnes Walk",
+      "parent": "agnes",
+      "disabled": true,
+      "transform_3d": { "position": [0.0, 0.0, 0.0], "rotation": [0.0, 0.0, 0.0, 1.0], "scale": [1.0, 1.0, 1.0] },
+      "components": {
+        "sindri.sprite": { "texture": "pixellab-The-character-initiates-a-rhyt-1791141120466.png#walk-0", "layer": 10 },
+        "sindri.animation.sprite": {
+          "clips": { "walk": { "frames": ["walk-0", "walk-1", "walk-2", "walk-3", "walk-4", "walk-5", "walk-6", "walk-7", "walk-8"], "seconds_per_frame": 0.085, "looping": true } },
+          "playing": "walk",
+          "speed": 1.0
+        }
       }
     }
   ]
