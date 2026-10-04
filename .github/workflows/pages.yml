@@ -53,7 +53,15 @@ jobs:
           workspaces: sindri-engine -> target
           key: fighting-pages-${{ steps.engine.outputs.ref }}
 
+      - name: Restore Sindri browser host
+        id: browser-host-cache
+        uses: actions/cache@v4
+        with:
+          path: sindri-engine/game/pkg
+          key: sindri-browser-host-${{ runner.os }}-${{ steps.engine.outputs.ref }}-wasm-pack-0.13.1
+
       - name: Install wasm-pack
+        if: steps.browser-host-cache.outputs.cache-hit != 'true'
         uses: taiki-e/install-action@v2
         with:
           tool: wasm-pack@0.13.1
@@ -63,6 +71,7 @@ jobs:
         run: cargo run --quiet --package decay-lsp -- --check ../fighting
 
       - name: Build Sindri browser host
+        if: steps.browser-host-cache.outputs.cache-hit != 'true'
         working-directory: sindri-engine
         run: wasm-pack build game --target web --release --out-dir pkg
 
