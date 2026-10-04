@@ -29,7 +29,7 @@ script Player {
         this.attack_left = World.find("Agnes Attack Left");
         this.attack_right = World.find("Agnes Attack Right");
         this.attack_button = World.find("Attack Button");
-        this.show(this.idle_right, "idle_right");
+        show(this.idle_right, "idle_right");
     }
 
     fn update(dt: f32) {
@@ -43,21 +43,21 @@ script Player {
         let attack = Input.just_pressed("Space") || Ui.is_pressed(this.attack_button);
 
         if this.state == 5.0 {
-            if Animation.is_finished(this.shown) { this.to_idle(); }
+            if Animation.is_finished(this.shown) { to_idle(); }
             return;
         }
 
         if attack {
             this.state = 5.0;
-            if this.facing_right { this.show(this.attack_right, "attack_right"); }
-            else { this.show(this.attack_left, "attack_left"); }
+            if this.facing_right { show(this.attack_right, "attack_right"); }
+            else { show(this.attack_left, "attack_left"); }
             return;
         }
 
         if this.state == 4.0 {
             if Animation.is_finished(this.shown) {
-                if wants_move { this.begin_move(move_x); }
-                else { this.to_idle(); }
+                if wants_move { begin_move(move_x); }
+                else { to_idle(); }
             }
             return;
         }
@@ -65,36 +65,36 @@ script Player {
         if wants_left && this.facing_right {
             this.facing_right = false;
             this.state = 4.0;
-            this.show(this.turn, "right_to_left");
+            show(this.turn, "right_to_left");
             return;
         }
         if wants_right && !this.facing_right {
             this.facing_right = true;
             this.state = 4.0;
-            this.show(this.turn, "left_to_right");
+            show(this.turn, "left_to_right");
             return;
         }
 
         if this.state == 1.0 && Animation.is_finished(this.shown) {
             this.state = 2.0;
-            if this.facing_right { this.show(this.move_right, "move_right"); }
-            else { this.show(this.move_left, "move_left"); }
+            if this.facing_right { show(this.move_right, "move_right"); }
+            else { show(this.move_left, "move_left"); }
         }
 
         if this.state == 3.0 {
-            if wants_move { this.begin_move(move_x); }
-            else if Animation.is_finished(this.shown) { this.to_idle(); }
+            if wants_move { begin_move(move_x); }
+            else if Animation.is_finished(this.shown) { to_idle(); }
             return;
         }
 
         if wants_move {
-            if this.state == 0.0 { this.begin_move(move_x); }
+            if this.state == 0.0 { begin_move(move_x); }
             this.transform.position.x += move_x * this.speed * dt;
             this.transform.position.x = max(-8.6, min(8.6, this.transform.position.x));
         } else if this.state == 1.0 || this.state == 2.0 {
             this.state = 3.0;
-            if this.facing_right { this.show(this.stop_right, "stop_right"); }
-            else { this.show(this.stop_left, "stop_left"); }
+            if this.facing_right { show(this.stop_right, "stop_right"); }
+            else { show(this.stop_left, "stop_left"); }
         }
     }
 
@@ -102,17 +102,17 @@ script Player {
         this.state = 1.0;
         if move_x > 0.0 {
             this.facing_right = true;
-            this.show(this.start_right, "start_right");
+            show(this.start_right, "start_right");
         } else {
             this.facing_right = false;
-            this.show(this.start_left, "start_left");
+            show(this.start_left, "start_left");
         }
     }
 
     fn to_idle() {
         this.state = 0.0;
-        if this.facing_right { this.show(this.idle_right, "idle_right"); }
-        else { this.show(this.idle_left, "idle_left"); }
+        if this.facing_right { show(this.idle_right, "idle_right"); }
+        else { show(this.idle_left, "idle_left"); }
     }
 
     fn show(entity: Entity, clip: String) {
