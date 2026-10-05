@@ -1,0 +1,16 @@
+[package]
+name = "fighting-runtime-tests"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[test]]
+name = "fighters"
+path = "fighters.rs"
+
+[dependencies]
+sindri-core = { path = "../../../sindri-engine/crates/sindri-core" }
+sindri-decay = { path = "../../../sindri-engine/crates/sindri-decay" }
+sindri-platform = { path = "../../../sindri-engine/crates/sindri-platform" }
+sindri-scene = { path = "../../../sindri-engine/crates/sindri-scene" }
+serde_json = "1"

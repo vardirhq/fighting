@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "playwright": "1.61.1",
+    "pngjs": "7.0.0"
+  }
+}

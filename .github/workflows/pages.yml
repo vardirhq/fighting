@@ -45,7 +45,7 @@ jobs:
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev pkg-config
+          sudo apt-get install -y libasound2-dev libudev-dev pkg-config xvfb xauth libvulkan1 mesa-vulkan-drivers
 
       - name: Cache Sindri build artifacts
         uses: Swatinem/rust-cache@v2
@@ -93,6 +93,37 @@ jobs:
           test -f "$RUNNER_TEMP/fighting-pages/pkg/sindri_causeway.js"
           test -f "$RUNNER_TEMP/fighting-pages/pkg/sindri_causeway_bg.wasm"
           grep -q '<base href="/fighting/">' "$RUNNER_TEMP/fighting-pages/index.html"
+
+      - name: Upload exported game for review
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fighting-web-preview
+          path: ${{ runner.temp }}/fighting-pages
+
+      - name: Install browser verification tools
+        run: |
+          npm ci --prefix fighting/tests/web --no-audit --no-fund
+          cd fighting/tests/web
+          npx playwright install --with-deps chromium
+
+      - name: Observe desktop and mobile exported gameplay
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/browser-site"
+          ln -s "$RUNNER_TEMP/fighting-pages" "$RUNNER_TEMP/browser-site/fighting"
+          python3 -m http.server 4173 --directory "$RUNNER_TEMP/browser-site" > "$RUNNER_TEMP/browser-server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          CAPTURE_DIR="$RUNNER_TEMP/fighting-captures" xvfb-run -a -s "-screen 0 1280x720x24" node fighting/tests/web/fighters.mjs
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fighting-browser-captures
+          path: ${{ runner.temp }}/fighting-captures
+          if-no-files-found: warn
 
       - name: Configure Pages
         if: github.event_name != 'pull_request'
