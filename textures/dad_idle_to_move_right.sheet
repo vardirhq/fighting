@@ -1,0 +1,5 @@
+{
+  "format_version": 1,
+  "anchor": "bottom",
+  "grid": { "columns": 3, "rows": 3, "names": ["start_right_0","start_right_1","start_right_2","start_right_3","start_right_4","start_right_5","start_right_6","start_right_7","start_right_8"] }
+}

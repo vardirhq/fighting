@@ -1,5 +1,9 @@
 script Player {
     @export let speed: f32 = 5.0;
+    @export let fighter_name: String = "Agnes";
+    @export let opponent_name: String = "Dad";
+    @export let primary_controls: bool = true;
+    @export let starts_facing_right: bool = true;
     var facing_right: bool = true;
     var state: f32 = 0.0;
     var shown: Entity = null;
@@ -21,33 +25,39 @@ script Player {
     var attack_sparked: bool = false;
 
     fn start() {
-        this.idle_left = World.find("Agnes Idle Left");
-        this.idle_right = World.find("Agnes Idle Right");
-        this.start_left = World.find("Agnes Start Left");
-        this.start_right = World.find("Agnes Start Right");
-        this.move_left = World.find("Agnes Move Left");
-        this.move_right = World.find("Agnes Move Right");
-        this.stop_left = World.find("Agnes Stop Left");
-        this.stop_right = World.find("Agnes Stop Right");
-        this.turn = World.find("Agnes Turn");
-        this.attack_left = World.find("Agnes Attack Left");
-        this.attack_right = World.find("Agnes Attack Right");
+        this.facing_right = this.starts_facing_right;
+        this.idle_left = World.find(this.fighter_name + " Idle Left");
+        this.idle_right = World.find(this.fighter_name + " Idle Right");
+        this.start_left = World.find(this.fighter_name + " Start Left");
+        this.start_right = World.find(this.fighter_name + " Start Right");
+        this.move_left = World.find(this.fighter_name + " Move Left");
+        this.move_right = World.find(this.fighter_name + " Move Right");
+        this.stop_left = World.find(this.fighter_name + " Stop Left");
+        this.stop_right = World.find(this.fighter_name + " Stop Right");
+        this.turn = World.find(this.fighter_name + " Turn");
+        this.attack_left = World.find(this.fighter_name + " Attack Left");
+        this.attack_right = World.find(this.fighter_name + " Attack Right");
         this.attack_button = World.find("Attack Button");
         this.step_dust = World.find("Step Dust");
         this.attack_sparks = World.find("Attack Sparks");
-        show(this.idle_right, "idle_right");
+        to_idle();
     }
 
     fn update(dt: f32) {
         this.step_cooldown = max(0.0, this.step_cooldown - dt);
-        let key_x = Input.axis("A", "D") + Input.axis("ArrowLeft", "ArrowRight");
-        var move_x = key_x;
-        if Stick.held && abs(Stick.x) > abs(move_x) { move_x = Stick.x; }
+        var move_x = Input.axis("J", "L");
+        if this.primary_controls {
+            move_x = Input.axis("A", "D") + Input.axis("ArrowLeft", "ArrowRight");
+            if Stick.held && abs(Stick.x) > abs(move_x) { move_x = Stick.x; }
+        }
         move_x = max(-1.0, min(1.0, move_x));
         let wants_left = move_x < -0.05;
         let wants_right = move_x > 0.05;
         let wants_move = wants_left || wants_right;
-        let attack = Input.just_pressed("Space") || Ui.is_pressed(this.attack_button);
+        var attack = Input.just_pressed("I");
+        if this.primary_controls {
+            attack = Input.just_pressed("Space") || Ui.is_pressed(this.attack_button);
+        }
 
         // Attacks remain committed for now; locomotion transitions are cancellable.
         if this.state == 5.0 {
@@ -161,8 +171,8 @@ script Player {
 
         // The projected silhouettes use this pose's sheet and clock. Their
         // parent controls visibility, so hiding the pose hides its shadow too.
-        var shadow_name = "Agnes Shadow " + clip;
-        if entity == this.turn { shadow_name = "Agnes Shadow turn"; }
+        var shadow_name = this.fighter_name + " Shadow " + clip;
+        if entity == this.turn { shadow_name = this.fighter_name + " Shadow turn"; }
         for i in 0..9 {
             let shadow = World.find(shadow_name + " " + i);
             Animation.play(shadow, clip);

@@ -1,0 +1,5 @@
+{
+  "format_version": 1,
+  "anchor": "bottom",
+  "grid": { "columns": 3, "rows": 3, "names": ["idle_right_0","idle_right_1","idle_right_2","idle_right_3","idle_right_4","idle_right_5","idle_right_6","idle_right_7","idle_right_8"] }
+}
