@@ -30,7 +30,10 @@ impl Run {
             let path = entry.unwrap().path();
             if path.extension().is_some_and(|ext| ext == "decay") {
                 let name = path.file_name().unwrap().to_string_lossy();
-                sources.insert(format!("scripts/{name}"), std::fs::read_to_string(&path).unwrap());
+                sources.insert(
+                    format!("scripts/{name}"),
+                    std::fs::read_to_string(&path).unwrap(),
+                );
             }
         }
         let mut run = Self {
@@ -56,12 +59,23 @@ impl Run {
     }
 
     fn x(&self, name: &str) -> f32 {
-        self.world.get(self.entity(name)).unwrap().transform_3d.unwrap().position[0]
+        self.world
+            .get(self.entity(name))
+            .unwrap()
+            .transform_3d
+            .unwrap()
+            .position[0]
     }
 
     fn set_x(&mut self, name: &str, x: f32) {
         let id = self.entity(name);
-        self.world.get_mut(id).unwrap().transform_3d.as_mut().unwrap().position[0] = x;
+        self.world
+            .get_mut(id)
+            .unwrap()
+            .transform_3d
+            .as_mut()
+            .unwrap()
+            .position[0] = x;
     }
 
     fn key(&mut self, key: Key, down: bool) {
@@ -74,7 +88,12 @@ impl Run {
 
     fn step(&mut self, dt: f32) {
         self.screen
-            .update(&self.world, &self.components, ScreenExtent::new(360.0, 640.0), self.input.presses())
+            .update(
+                &mut self.world,
+                &self.components,
+                ScreenExtent::new(360.0, 640.0),
+                self.input.presses(),
+            )
             .unwrap();
         let report = self.scripts.advance(
             &mut self.world,
@@ -85,7 +104,9 @@ impl Run {
                 .with_animations(&mut self.animations),
         );
         assert!(report.failures.is_empty(), "{:?}", report.failures);
-        self.animations.advance(&self.world, &self.components, dt).unwrap();
+        self.animations
+            .advance(&self.world, &self.components, dt)
+            .unwrap();
         self.effects.advance(Duration::from_secs_f32(dt));
         self.input.begin_frame(Duration::from_secs_f32(dt));
         self.check_poses_and_shadows();
@@ -99,17 +120,31 @@ impl Run {
 
     fn active_pose(&self, fighter: &str) -> EntityId {
         let parent = self.entity(fighter);
-        let poses: Vec<_> = self.world.entities().filter(|(id, data)| {
-            data.parent == Some(parent) && self.world.is_active(*id)
-                && data.components.contains_key("sindri.animation.sprite")
-        }).map(|(id, _)| id).collect();
-        assert_eq!(poses.len(), 1, "{fighter} must have exactly one visible pose");
+        let poses: Vec<_> = self
+            .world
+            .entities()
+            .filter(|(id, data)| {
+                data.parent == Some(parent)
+                    && self.world.is_active(*id)
+                    && data.components.contains_key("sindri.animation.sprite")
+            })
+            .map(|(id, _)| id)
+            .collect();
+        assert_eq!(
+            poses.len(),
+            1,
+            "{fighter} must have exactly one visible pose"
+        );
         poses[0]
     }
 
     fn clip(&self, fighter: &str) -> &str {
-        self.world.get(self.active_pose(fighter)).unwrap()
-            .components["sindri.animation.sprite"]["playing"].as_str().unwrap()
+        self.world
+            .get(self.active_pose(fighter))
+            .unwrap()
+            .components["sindri.animation.sprite"]["playing"]
+            .as_str()
+            .unwrap()
     }
 
     fn check_poses_and_shadows(&self) {
@@ -121,9 +156,12 @@ impl Run {
             let placed = self.world.world_transform(pose).unwrap();
             assert_eq!(placed.position, root.position, "pose inherits its fighter");
             assert_eq!(placed.scale, root.scale, "switching poses preserves scale");
-            let shadows: Vec<_> = self.world.entities()
+            let shadows: Vec<_> = self
+                .world
+                .entities()
                 .filter(|(_, data)| data.parent == Some(pose))
-                .map(|(id, _)| id).collect();
+                .map(|(id, _)| id)
+                .collect();
             assert_eq!(shadows.len(), 9);
             for shadow in shadows {
                 assert!(self.world.is_active(shadow));
@@ -148,7 +186,12 @@ fn both_fighters_retreat_facing_the_opponent_and_reverse_the_actual_frames() {
     for name in ["Agnes", "Dad"] {
         let mut seen = Vec::new();
         for _ in 0..5 {
-            seen.push(run.animations.sprite(run.active_pose(name)).unwrap().to_owned());
+            seen.push(
+                run.animations
+                    .sprite(run.active_pose(name))
+                    .unwrap()
+                    .to_owned(),
+            );
             run.step(0.07);
         }
         for pair in seen.windows(2) {
@@ -191,7 +234,11 @@ fn crossing_sides_turns_both_fighters_in_place_even_without_input() {
     run.set_x("Agnes", 0.0);
     run.set_x("Dad", 0.0);
     run.frames(8);
-    assert_eq!(run.clip("Agnes"), "idle_left", "ties keep the previous facing");
+    assert_eq!(
+        run.clip("Agnes"),
+        "idle_left",
+        "ties keep the previous facing"
+    );
     assert_eq!(run.clip("Dad"), "idle_right");
 }
 
@@ -220,9 +267,17 @@ fn touch_moves_only_agnes_horizontally_and_uses_backward_playback() {
     let mut run = Run::new();
     let dad_x = run.x("Dad");
     let agnes_x = run.x("Agnes");
-    run.input.apply(InputEvent::TouchStarted { id: 1, x: 120.0, y: 510.0 });
+    run.input.apply(InputEvent::TouchStarted {
+        id: 1,
+        x: 120.0,
+        y: 510.0,
+    });
     run.step(DT);
-    run.input.apply(InputEvent::TouchMoved { id: 1, x: 55.0, y: 510.0 });
+    run.input.apply(InputEvent::TouchMoved {
+        id: 1,
+        x: 55.0,
+        y: 510.0,
+    });
     run.frames(12);
     assert!(run.x("Agnes") < agnes_x);
     assert_eq!(run.x("Dad"), dad_x, "Dad must not consume Agnes's joystick");

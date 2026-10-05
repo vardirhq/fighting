@@ -55,15 +55,8 @@ jobs:
       - name: Run fighter gameplay regressions
         working-directory: sindri-engine
         run: |
-          cargo fmt --manifest-path ../fighting/tests/runtime/Cargo.toml
+          cargo fmt --manifest-path ../fighting/tests/runtime/Cargo.toml -- --check
           cargo test --manifest-path ../fighting/tests/runtime/Cargo.toml --target-dir target
-
-      - name: Upload formatted regression source
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: fighting-formatted-regressions
-          path: fighting/tests/runtime/fighters.rs
 
       - name: Export project from outside the Sindri repository
         working-directory: sindri-engine

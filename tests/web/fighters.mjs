@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 const out = process.env.CAPTURE_DIR || 'captures';
 await mkdir(out, { recursive: true });
 const browser = await chromium.launch({
-  args: ['--enable-unsafe-webgpu', '--use-angle=vulkan',
+  channel: 'chromium',
+  args: ['--enable-unsafe-webgpu', '--use-angle=swiftshader', '--use-vulkan=swiftshader',
     '--enable-features=Vulkan', '--disable-vulkan-surface'],
 });
 
@@ -39,17 +40,21 @@ try {
     });
     const page = await context.newPage();
     const errors = [];
-    page.on('pageerror', error => errors.push(String(error)));
+    page.on('pageerror', error => {
+      errors.push(String(error));
+      page.evaluate(() => { window.__fighterBrowserFailed = true; }).catch(() => {});
+    });
     page.on('console', message => {
       if (message.type() === 'error') errors.push(message.text());
     });
     try {
       await page.goto('http://127.0.0.1:4173/fighting/', { waitUntil: 'networkidle' });
       await page.waitForFunction(() =>
-        !document.querySelector('#sindri-loading') &&
+        window.__fighterBrowserFailed || (!document.querySelector('#sindri-loading') &&
         document.querySelector('#sindri-canvas') &&
-        document.querySelector('#sindri-error')?.dataset.visible !== 'true',
+        document.querySelector('#sindri-error')?.dataset.visible !== 'true'),
         null, { timeout: 60000 });
+      assert.deepEqual(errors, [], 'browser startup must succeed');
       await page.waitForTimeout(300);
       const canvas = page.locator('#sindri-canvas');
       const before = await canvas.screenshot({ path: out + '/' + name + '-idle.png' });
