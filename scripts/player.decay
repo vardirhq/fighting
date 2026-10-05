@@ -1,5 +1,6 @@
 script Player {
     @export let speed: f32 = 5.0;
+    @export let walk_reference_speed: f32 = 5.0;
     @export let fighter_name: String = "Agnes";
     @export let opponent_name: String = "Dad";
     @export let primary_controls: bool = true;
@@ -10,6 +11,7 @@ script Player {
     var walking_backwards: bool = false;
     var state: f32 = 0.0;
     var shown: Entity = null;
+    var shown_shadow: String = "";
     var idle_left: Entity = null;
     var idle_right: Entity = null;
     var move_left: Entity = null;
@@ -65,11 +67,13 @@ script Player {
         let side_changed = this.facing_right != previous_facing;
         // Turning changes the artwork, never the response to movement input.
         // Attacks retain their stationary behavior unless a side change cancels one.
+        var moved_x = 0.0;
         if wants_move && ((this.state != 5.0 && !attack) || side_changed) {
             let previous_x = this.transform.position.x;
             this.transform.position.x += move_x * this.speed * dt;
             this.transform.position.x = max(-8.6, min(8.6, this.transform.position.x));
-            if this.transform.position.x != previous_x && this.step_cooldown <= 0.0 {
+            moved_x = this.transform.position.x - previous_x;
+            if moved_x != 0.0 && this.step_cooldown <= 0.0 {
                 Effects.burst_at(this.step_dust,
                     this.transform.position.x, this.transform.position.y + 0.05);
                 this.step_cooldown = 0.14;
@@ -92,8 +96,7 @@ script Player {
                 this.attack_sparked = true;
             }
             if Animation.is_finished(this.shown) {
-                if wants_move { begin_loop(move_x); }
-                else { to_idle(); }
+                to_idle();
             }
             return;
         }
@@ -109,8 +112,16 @@ script Player {
         if this.state == 4.0 {
             if !Animation.is_finished(this.shown) { return; }
         }
-        if wants_move { begin_loop(move_x); }
-        else if this.state != 0.0 { to_idle(); }
+        if abs(moved_x) > 0.0 && dt > 0.0 {
+            begin_loop(moved_x);
+            // Actual translation includes analog input, configured speed and
+            // boundary clipping. Change tempo without restarting the loop.
+            let rate = abs(moved_x) / (dt * max(0.001, this.walk_reference_speed));
+            Animation.set_speed(this.shown, rate);
+            for i in 0..9 {
+                Animation.set_speed(World.find(this.shown_shadow + " " + i), rate);
+            }
+        } else if this.state != 0.0 { to_idle(); }
     }
 
     fn update_layering() {
@@ -175,6 +186,7 @@ script Player {
         World.set_active(entity, true);
         Animation.play(entity, clip);
         Animation.restart(entity);
+        Animation.set_speed(entity, 1.0);
 
         // The projected silhouettes use this pose's sheet and clock. Their
         // parent controls visibility, so hiding the pose hides its shadow too.
@@ -182,10 +194,12 @@ script Player {
         if entity == this.move_left { shadow_name = this.fighter_name + " Shadow move_left"; }
         if entity == this.move_right { shadow_name = this.fighter_name + " Shadow move_right"; }
         if entity == this.turn { shadow_name = this.fighter_name + " Shadow turn"; }
+        this.shown_shadow = shadow_name;
         for i in 0..9 {
             let shadow = World.find(shadow_name + " " + i);
             Animation.play(shadow, clip);
             Animation.restart(shadow);
+            Animation.set_speed(shadow, 1.0);
         }
     }
 }
