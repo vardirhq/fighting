@@ -34,8 +34,8 @@ no AI or combat damage has been added.
 Facing is decided by opponent X, independent of movement input. At equal X the
 last facing is retained. Crossing sides triggers a three-pose 90 ms turn,
 even while idle, without delaying or pausing held movement. An attack can
-interrupt the visual turn immediately. A side change interrupts an attack so it cannot keep pointing
-away from the opponent. Otherwise attacks keep their existing one-shot behavior.
+interrupt the visual turn immediately. A side change interrupts an attack so it
+cannot keep pointing away from the opponent. Otherwise attacks keep their existing one-shot behavior.
 
 Walking toward the opponent uses the matching facing-direction loop. Walking
 away uses those same frames in reverse order, at the same speed; reversing
@@ -59,8 +59,7 @@ desktop and portrait mobile sizes. It compares rendered pink-clothing positions
 after keyboard and touch movement, and saves idle, movement and retreat captures
 as `fighting-browser-captures`. Native regressions check real Decay execution,
 reverse frame progression, immediate starts/stops, movement through turns,
-attacks, ties, horizontal movement,
-inherited pose transforms and frame-perfect shadow synchronization.
+attacks, ties, horizontal movement, inherited pose transforms and frame-perfect shadow synchronization.
 
 Software Chromium evidence does not replace checking a physical Android/iOS
 device's WebGPU driver and touch feel.
