@@ -98,7 +98,15 @@ try {
       await page.waitForTimeout(180);
 
       if (name === 'mobile') {
-        const beforeTouch = await canvas.screenshot();
+        // Start touch verification from the authored position. Capturing a
+        // retreat while its key is held can run for seconds on software GPUs,
+        // leaving Agnes outside the portrait crop before this separate check.
+        await page.reload({ waitUntil: 'networkidle' });
+        await page.waitForFunction(() =>
+          !document.querySelector('#sindri-loading') &&
+          document.querySelector('#sindri-error')?.dataset.visible !== 'true');
+        await page.waitForTimeout(1000);
+        const beforeTouch = await canvas.screenshot({ path: out + '/mobile-touch-idle.png' });
         const cdp = await context.newCDPSession(page);
         const x = viewport.width * 0.2, y = viewport.height * 0.82;
         await cdp.send('Input.dispatchTouchEvent', {
@@ -109,7 +117,7 @@ try {
         await page.evaluate(() => new Promise(resolve =>
           requestAnimationFrame(() => requestAnimationFrame(resolve))));
         await cdp.send('Input.dispatchTouchEvent', {
-          type: 'touchMove', touchPoints: [{ x: x + 65, y }],
+          type: 'touchMove', touchPoints: [{ x: x + 120, y }],
         });
         await page.waitForTimeout(220);
         await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
