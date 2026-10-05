@@ -13,12 +13,14 @@ const browser = await chromium.launch({
     '--enable-features=Vulkan', '--disable-vulkan-surface'],
 });
 
-// Agnes's pink overalls, above the pink carpet. Compare the same resting
+// Sample the torso of Agnes's pink overalls, above the pink carpet.
+// Including lower rows lets the large static carpet dominate the centroid.
+// Compare the same resting
 // pose before/after input, so animation wobble cannot pass as translation.
 function pinkCentre(bytes) {
   const image = PNG.sync.read(bytes);
   let sum = 0, count = 0;
-  for (let y = Math.floor(image.height * 0.43); y < image.height * 0.685; y++) {
+  for (let y = Math.floor(image.height * 0.50); y < image.height * 0.59; y++) {
     for (let x = Math.max(0, Math.floor(image.width / 2 - image.height * 0.34));
       x < Math.min(image.width, image.width / 2 + image.height * 0.16); x++) {
       const i = (y * image.width + x) * 4;
