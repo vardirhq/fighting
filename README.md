@@ -18,7 +18,8 @@ The project is pinned to the Sindri revision in `.sindri-engine`, following the 
 - Agnes: A/D or arrows to move horizontally; Space or the touch button to attack.
 - Dad: J/L to move; I to attack.
 - Fighters face their opponent; retreating plays the facing walk loop backwards.
-- Start, stop and turn transitions last 90 ms; walk loops use 70 ms per frame.
+- Movement starts/stops immediately; three-frame turns last 90 ms without pausing movement.
+- Walk loops use 70 ms per frame.
 - Movement stays on the carpet plane.
 
 See [fighter behavior and verification](docs/fighters.md).
