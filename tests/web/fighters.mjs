@@ -34,7 +34,8 @@ function pinkCentre(bytes) {
   return sum / count;
 }
 
-// Balance meters use flat authored pink, separate from the room and sprites.
+// Linear [1, .33, .55] renders as sRGB [255, 155, 196]. Sample that
+// flat meter colour, separate from the room and sprites.
 function pinkBalancePixels(bytes) {
   const image = PNG.sync.read(bytes);
   let count = 0;
@@ -42,7 +43,7 @@ function pinkBalancePixels(bytes) {
     for (let x = Math.floor(image.width * 0.02); x < image.width * 0.49; x++) {
       const i = (y * image.width + x) * 4;
       const [r, g, b] = image.data.subarray(i, i + 3);
-      if (r > 220 && g > 50 && g < 115 && b > 100 && b < 170) count++;
+      if (r > 245 && g > 145 && g < 165 && b > 185 && b < 210) count++;
     }
   }
   return count;
@@ -208,3 +209,4 @@ try {
     }
   }
 } finally { await browser.close(); }
+
