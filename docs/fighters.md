@@ -5,8 +5,12 @@ fighter name, opponent name, controls and initial facing; each pose and its nine
 shadow taps remain under the fighter's transform. Dad's newly uploaded textures
 are sliced by adjacent bottom-anchored 3x3 `.sheet` files.
 
-Both fighters start on the carpet at Y -2.6 with scale 4.4. Initial X positions
-are -1.65 and +1.65 to accommodate the portrait view.
+Both fighters start on the carpet at Y -2.6. Agnes uses scale [3, 3, 1];
+Dad uses [4.21875, 6, 1], making him twice her authored height. His 90x128
+frames require width/height = 90/128, so the narrower X scale preserves the
+original artwork rather than stretching it into a square. Every pose and its
+shadows inherit that same sizing. Initial X positions are -1.5 and +1.1 to
+keep both resting fighters inside the portrait view.
 
 | Animation | Seconds per frame | Nine-frame duration |
 | --- | --- | --- |

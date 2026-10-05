@@ -151,7 +151,12 @@ impl Run {
         for name in ["Agnes", "Dad"] {
             let root = self.world.world_transform(self.entity(name)).unwrap();
             assert_eq!(root.position[1], -2.6, "movement stays horizontal");
-            assert_eq!(root.scale, [4.4, 4.4, 1.0]);
+            let expected_scale = if name == "Dad" {
+                [4.21875, 6.0, 1.0]
+            } else {
+                [3.0, 3.0, 1.0]
+            };
+            assert_eq!(root.scale, expected_scale);
             let pose = self.active_pose(name);
             let placed = self.world.world_transform(pose).unwrap();
             assert_eq!(placed.position, root.position, "pose inherits its fighter");
@@ -179,8 +184,8 @@ fn both_fighters_retreat_facing_the_opponent_and_reverse_the_actual_frames() {
     run.key(Key::A, true);
     run.key(Key::L, true);
     run.frames(12);
-    assert!(run.x("Agnes") < -1.65);
-    assert!(run.x("Dad") > 1.65);
+    assert!(run.x("Agnes") < -1.5);
+    assert!(run.x("Dad") > 1.1);
     assert_eq!(run.clip("Agnes"), "back_right");
     assert_eq!(run.clip("Dad"), "back_left");
     for name in ["Agnes", "Dad"] {

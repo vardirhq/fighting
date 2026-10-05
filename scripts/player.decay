@@ -85,10 +85,10 @@ script Player {
 
         if this.state == 5.0 {
             if !this.attack_sparked && Animation.frame(this.shown) >= 3.0 {
-                var reach = -0.95;
-                if this.facing_right { reach = 0.95; }
+                var reach = -this.transform.scale.x * 0.95 / 4.4;
+                if this.facing_right { reach = this.transform.scale.x * 0.95 / 4.4; }
                 Effects.burst_at(this.attack_sparks,
-                    this.transform.position.x + reach, this.transform.position.y + 1.7);
+                    this.transform.position.x + reach, this.transform.position.y + this.transform.scale.y * 1.7 / 4.4);
                 this.attack_sparked = true;
             }
             if Animation.is_finished(this.shown) { to_idle(); }
