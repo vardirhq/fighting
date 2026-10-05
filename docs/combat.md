@@ -36,7 +36,10 @@ All gameplay lives in Decay. The current artwork stands in for dodge/hurt/tumble
 poses with tint, flash, pause and knockback; dedicated reaction sprites and camera
 shake remain future polish. `audio/hit.wav` is a short synthesized impact, and
 the bundled Chakra Petch font carries its license in `fonts/Fonts-OFL.txt`.
+An inactive audio source named Hit Sound declares the impact clip to the exporter;
+actual playback is requested only when an accepted hit lands.
 
 CI runs the original controller regressions in practice configuration alongside
 combat tests for startup/range, single hits, dodge cooldown, AI and full matches.
+Native checks also exercise both portrait touch buttons and their screen bounds.
 Browser checks cover desktop/portrait movement and touch, then the real AI bout.

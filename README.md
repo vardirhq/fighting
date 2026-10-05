@@ -37,4 +37,5 @@ The PixelLab sheets are currently treated as 3x3 grids. If a sheet's authored la
 - `textures/dad/`: active 256-pixel Dad sprites and sheet definitions.
 - `textures/dad/archive/`: earlier Dad artwork, preserved for reference.
 - `textures/backgrounds/` and `textures/effects/`: room art and effect textures.
+- `audio/` and `fonts/`: impact sound and licensed HUD font.
 - `main.scene.json`: scene setup; `scripts/`: gameplay; `tests/`: runtime and browser checks; `docs/`: behavior and rendering notes.

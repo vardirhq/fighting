@@ -786,3 +786,39 @@ fn accepted_hits_briefly_pause_both_fighters_then_restore_animation() {
     assert!(run.playback_speed("Agnes") > 0.0);
     assert_eq!(run.balance("Dad"), 75.0);
 }
+
+#[test]
+fn portrait_touch_buttons_fit_and_trigger_dodge_and_attack() {
+    let mut run = Run::combat(false);
+    for name in ["Dodge Button", "Attack Button"] {
+        let rect = run.screen.rect(run.entity(name)).unwrap();
+        assert!(rect.center[0].abs() + rect.size[0] * 0.5 <= 360.0 / 640.0);
+        assert!(rect.center[1].abs() + rect.size[1] * 0.5 <= 1.0);
+    }
+    let tap = |run: &mut Run, name: &str| {
+        let rect = run.screen.rect(run.entity(name)).unwrap();
+        run.input.apply(InputEvent::TouchStarted {
+            id: 2,
+            x: 180.0 + rect.center[0] * 320.0,
+            y: 320.0 - rect.center[1] * 320.0,
+        });
+        run.step(DT);
+        run.input.apply(InputEvent::TouchEnded { id: 2 });
+        run.step(DT);
+    };
+    let before = run.x("Agnes");
+    tap(&mut run, "Dodge Button");
+    assert!(run.x("Agnes") < before, "touch dodge retreats");
+    assert_eq!(run.text("Dodge Label"), "WAIT");
+    run.frames(20);
+    run.set_x("Agnes", 0.0);
+    run.set_x("Dad", 1.0);
+    tap(&mut run, "Attack Button");
+    assert_eq!(run.clip("Agnes"), "attack_right");
+    run.frames(30);
+    assert_eq!(
+        run.balance("Dad"),
+        75.0,
+        "touch attack deals balance damage"
+    );
+}

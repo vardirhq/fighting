@@ -79,3 +79,5 @@ jobs:
           find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'dad_idle_right_256.png' -print -quit | grep -q .
           find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'dad_move_left_256.png' -print -quit | grep -q .
           find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'dad_move_right_256.png' -print -quit | grep -q .
+          find "$RUNNER_TEMP/fighting-export/assets" -type f -path '*/audio/hit.wav' -print -quit | grep -q .
+          find "$RUNNER_TEMP/fighting-export/assets" -type f -path '*/fonts/ChakraPetch-Regular.ttf' -print -quit | grep -q .
