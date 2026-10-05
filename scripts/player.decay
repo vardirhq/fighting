@@ -12,12 +12,8 @@ script Player {
     var shown: Entity = null;
     var idle_left: Entity = null;
     var idle_right: Entity = null;
-    var start_left: Entity = null;
-    var start_right: Entity = null;
     var move_left: Entity = null;
     var move_right: Entity = null;
-    var stop_left: Entity = null;
-    var stop_right: Entity = null;
     var turn: Entity = null;
     var attack_left: Entity = null;
     var attack_right: Entity = null;
@@ -33,12 +29,8 @@ script Player {
         update_facing();
         this.idle_left = World.find(this.fighter_name + " Idle Left");
         this.idle_right = World.find(this.fighter_name + " Idle Right");
-        this.start_left = World.find(this.fighter_name + " Start Left");
-        this.start_right = World.find(this.fighter_name + " Start Right");
         this.move_left = World.find(this.fighter_name + " Move Left");
         this.move_right = World.find(this.fighter_name + " Move Right");
-        this.stop_left = World.find(this.fighter_name + " Stop Left");
-        this.stop_right = World.find(this.fighter_name + " Stop Right");
         this.turn = World.find(this.fighter_name + " Turn");
         this.attack_left = World.find(this.fighter_name + " Attack Left");
         this.attack_right = World.find(this.fighter_name + " Attack Right");
@@ -70,19 +62,24 @@ script Player {
         // the previous side so overlapping fighters do not flicker.
         let previous_facing = this.facing_right;
         update_facing();
-        if this.facing_right != previous_facing {
+        let side_changed = this.facing_right != previous_facing;
+        // Turning changes the artwork, never the response to movement input.
+        // Attacks retain their stationary behavior unless a side change cancels one.
+        if wants_move && ((this.state != 5.0 && !attack) || side_changed) {
+            let previous_x = this.transform.position.x;
+            this.transform.position.x += move_x * this.speed * dt;
+            this.transform.position.x = max(-8.6, min(8.6, this.transform.position.x));
+            if this.transform.position.x != previous_x && this.step_cooldown <= 0.0 {
+                Effects.burst_at(this.step_dust,
+                    this.transform.position.x, this.transform.position.y + 0.05);
+                this.step_cooldown = 0.14;
+            }
+        }
+        if side_changed {
             // A side change takes priority even during an attack.
             this.state = 4.0;
             if this.facing_right { show(this.turn, "left_to_right"); }
             else { show(this.turn, "right_to_left"); }
-            return;
-        }
-
-        if this.state == 4.0 {
-            if Animation.is_finished(this.shown) {
-                if wants_move { begin_move(); }
-                else { to_idle(); }
-            }
             return;
         }
 
@@ -94,7 +91,10 @@ script Player {
                     this.transform.position.x + reach, this.transform.position.y + this.transform.scale.y * 1.7 / 4.4);
                 this.attack_sparked = true;
             }
-            if Animation.is_finished(this.shown) { to_idle(); }
+            if Animation.is_finished(this.shown) {
+                if wants_move { begin_loop(move_x); }
+                else { to_idle(); }
+            }
             return;
         }
 
@@ -106,43 +106,11 @@ script Player {
             return;
         }
 
-        // Turning is a brief pivot in place. The turn branches above return
-        // before translation, including the frame that starts a new turn.
-        // Start, loop and stop clips still move immediately with held input.
-        if wants_move {
-            let previous_x = this.transform.position.x;
-            this.transform.position.x += move_x * this.speed * dt;
-            this.transform.position.x = max(-8.6, min(8.6, this.transform.position.x));
-            if this.transform.position.x != previous_x && this.step_cooldown <= 0.0 {
-                Effects.burst_at(this.step_dust,
-                    this.transform.position.x, this.transform.position.y + 0.05);
-                this.step_cooldown = 0.14;
-            }
+        if this.state == 4.0 {
+            if !Animation.is_finished(this.shown) { return; }
         }
-
-        if this.state == 1.0 {
-            if !wants_move {
-                begin_stop();
-                return;
-            }
-            if Animation.is_finished(this.shown) {
-                begin_loop(move_x);
-            }
-            return;
-        }
-
-        if this.state == 3.0 {
-            if wants_move { begin_move(); }
-            else if Animation.is_finished(this.shown) { to_idle(); }
-            return;
-        }
-
-        if wants_move {
-            if this.state == 0.0 { begin_move(); }
-            else if this.state == 2.0 { begin_loop(move_x); }
-        } else if this.state == 2.0 {
-            begin_stop();
-        }
+        if wants_move { begin_loop(move_x); }
+        else if this.state != 0.0 { to_idle(); }
     }
 
     fn update_layering() {
@@ -165,12 +133,8 @@ script Player {
         // Shadow taps keep their separate layer 5 beneath both fighters.
         this.idle_left.sprite.layer = layer;
         this.idle_right.sprite.layer = layer;
-        this.start_left.sprite.layer = layer;
-        this.start_right.sprite.layer = layer;
         this.move_left.sprite.layer = layer;
         this.move_right.sprite.layer = layer;
-        this.stop_left.sprite.layer = layer;
-        this.stop_right.sprite.layer = layer;
         this.turn.sprite.layer = layer;
         this.attack_left.sprite.layer = layer;
         this.attack_right.sprite.layer = layer;
@@ -182,12 +146,6 @@ script Player {
             if separation > 0.0 { this.facing_right = true; }
             else if separation < 0.0 { this.facing_right = false; }
         }
-    }
-
-    fn begin_move() {
-        this.state = 1.0;
-        if this.facing_right { show(this.start_right, "start_right"); }
-        else { show(this.start_left, "start_left"); }
     }
 
     fn begin_loop(move_x: f32) {
@@ -203,12 +161,6 @@ script Player {
             if backwards { show(this.move_left, "back_left"); }
             else { show(this.move_left, "move_left"); }
         }
-    }
-
-    fn begin_stop() {
-        this.state = 3.0;
-        if this.facing_right { show(this.stop_right, "stop_right"); }
-        else { show(this.stop_left, "stop_left"); }
     }
 
     fn to_idle() {

@@ -156,6 +156,13 @@ impl Run {
                 [3.0, 3.0, 1.0]
             };
             assert_eq!(root.scale, expected_scale);
+            let parent = self.entity(name);
+            let poses: Vec<_> = self
+                .world
+                .entities()
+                .filter(|(_, data)| data.parent == Some(parent))
+                .collect();
+            assert_eq!(poses.len(), 7, "no start/stop entities remain");
             let pose = self.active_pose(name);
             let placed = self.world.world_transform(pose).unwrap();
             assert_eq!(placed.position, root.position, "pose inherits its fighter");
@@ -187,7 +194,10 @@ fn both_fighters_retreat_facing_the_opponent_and_reverse_the_actual_frames() {
     assert_eq!(run.clip("Dad"), "idle_left");
     run.key(Key::A, true);
     run.key(Key::L, true);
-    run.frames(12);
+    run.step(DT);
+    assert_eq!(run.clip("Agnes"), "back_right", "no start transition");
+    assert_eq!(run.clip("Dad"), "back_left", "no start transition");
+    run.frames(11);
     assert!(run.x("Agnes") < -1.5);
     assert!(run.x("Dad") > 1.1);
     assert_eq!(run.clip("Agnes"), "back_right");
@@ -217,27 +227,37 @@ fn both_fighters_retreat_facing_the_opponent_and_reverse_the_actual_frames() {
     assert_eq!(run.clip("Dad"), "move_left");
     run.key(Key::D, false);
     run.key(Key::J, false);
-    run.frames(8);
-    assert_eq!(run.clip("Agnes"), "idle_right");
-    assert_eq!(run.clip("Dad"), "idle_left");
+    run.step(DT);
+    assert_eq!(run.clip("Agnes"), "idle_right", "no stop transition");
+    assert_eq!(run.clip("Dad"), "idle_left", "no stop transition");
 }
 
 #[test]
-fn crossing_sides_turns_both_fighters_in_place_even_without_input() {
+fn crossing_sides_turns_both_fighters_without_blocking_movement() {
     let mut run = Run::new();
     run.set_x("Agnes", 3.0);
     run.set_x("Dad", -3.0);
-    run.step(DT);
-    assert_eq!(run.clip("Agnes"), "right_to_left");
-    assert_eq!(run.clip("Dad"), "left_to_right");
     run.key(Key::A, true);
     run.key(Key::L, true);
+    run.step(DT);
+    assert!(run.x("Agnes") < 3.0, "movement on the first turn frame");
+    assert!(run.x("Dad") > -3.0);
+    assert_eq!(run.clip("Agnes"), "right_to_left");
+    assert_eq!(run.clip("Dad"), "left_to_right");
     run.frames(4);
-    assert_eq!(run.x("Agnes"), 3.0, "no translation during the turn");
-    assert_eq!(run.x("Dad"), -3.0);
+    assert!(run.x("Agnes") < 2.6, "movement throughout the turn");
+    assert!(run.x("Dad") > -2.6);
+    let agnes_x = run.x("Agnes");
+    let dad_x = run.x("Dad");
     run.key(Key::A, false);
     run.key(Key::L, false);
     run.frames(3);
+    assert_eq!(
+        run.x("Agnes"),
+        agnes_x,
+        "release stops translation immediately"
+    );
+    assert_eq!(run.x("Dad"), dad_x);
     assert_eq!(run.clip("Agnes"), "idle_left");
     assert_eq!(run.clip("Dad"), "idle_right");
     run.set_x("Agnes", 0.0);
@@ -362,4 +382,42 @@ fn ground_position_orders_every_pose_with_shorter_fighter_winning_ties() {
     run.step(DT);
     layers(&run, "Agnes", 11);
     layers(&run, "Dad", 10);
+}
+
+#[test]
+fn three_pose_turns_match_their_shadows_and_can_be_interrupted_by_attacks() {
+    let mut run = Run::new();
+    for name in ["Agnes", "Dad"] {
+        let turn = run.entity(&format!("{name} Turn"));
+        let pivot = if name == "Agnes" { "turn_5" } else { "turn_3" };
+        for (id, data) in run.world.entities() {
+            if id != turn && data.parent != Some(turn) {
+                continue;
+            }
+            let clips = &data.components["sindri.animation.sprite"]["clips"];
+            for (direction, expected) in [
+                ("right_to_left", ["turn_0", pivot, "turn_8"]),
+                ("left_to_right", ["turn_8", pivot, "turn_0"]),
+            ] {
+                let frames: Vec<_> = clips[direction]["frames"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|frame| frame.as_str().unwrap())
+                    .collect();
+                assert_eq!(frames, expected);
+                assert_eq!(clips[direction]["seconds_per_frame"], 0.03);
+            }
+        }
+    }
+    run.set_x("Agnes", 3.0);
+    run.set_x("Dad", -3.0);
+    run.step(DT);
+    assert_eq!(run.clip("Agnes"), "right_to_left");
+    assert_eq!(run.clip("Dad"), "left_to_right");
+    run.key(Key::Space, true);
+    run.key(Key::I, true);
+    run.step(DT);
+    assert_eq!(run.clip("Agnes"), "attack_left", "attack interrupts pivot");
+    assert_eq!(run.clip("Dad"), "attack_right");
 }
