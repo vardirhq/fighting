@@ -475,10 +475,16 @@ fn analog_walk_tempo_tracks_travel_and_changes_without_restarting() {
     let before = run.x("Agnes");
     run.step(DT);
     let actual_rate = f64::from((run.x("Agnes") - before).abs() / (DT * 5.0));
-    assert!(actual_rate > 0.0 && actual_rate < 0.75, "gentle input slows steps");
+    assert!(
+        actual_rate > 0.0 && actual_rate < 0.75,
+        "gentle input slows steps"
+    );
     assert!((run.playback_speed("Agnes") - actual_rate).abs() < 0.0001);
     assert_eq!(run.active_pose("Agnes"), pose);
-    assert!(run.animations.frame(pose).unwrap() >= frame, "tempo change keeps phase");
+    assert!(
+        run.animations.frame(pose).unwrap() >= frame,
+        "tempo change keeps phase"
+    );
     // Reverse retreat uses the same positive multiplier and reversed frames.
     run.input.apply(InputEvent::TouchMoved {
         id: 1,
@@ -491,7 +497,11 @@ fn analog_walk_tempo_tracks_travel_and_changes_without_restarting() {
     run.key(Key::Space, true);
     run.step(DT);
     assert_eq!(run.clip("Agnes"), "attack_right");
-    assert_eq!(run.playback_speed("Agnes"), 1.0, "attack retains its timing");
+    assert_eq!(
+        run.playback_speed("Agnes"),
+        1.0,
+        "attack retains its timing"
+    );
     run.key(Key::Space, false);
     run.input.apply(InputEvent::TouchEnded { id: 1 });
     run.frames(40);
@@ -529,9 +539,17 @@ fn clipped_steps_slow_the_cycle_and_blocked_input_returns_to_idle() {
     let actual_rate = f64::from((run.x("Agnes") - before) / (DT * 5.0));
     assert!(actual_rate > 0.0 && actual_rate < 0.3);
     assert!((run.playback_speed("Agnes") - actual_rate).abs() < 0.0001);
-    assert_eq!(run.clip("Dad"), "idle_right", "blocked from the first frame");
+    assert_eq!(
+        run.clip("Dad"),
+        "idle_right",
+        "blocked from the first frame"
+    );
     run.step(DT);
-    assert_eq!(run.clip("Agnes"), "idle_left", "no walking against boundary");
+    assert_eq!(
+        run.clip("Agnes"),
+        "idle_left",
+        "no walking against boundary"
+    );
     assert_eq!(run.playback_speed("Agnes"), 1.0);
     run.key(Key::D, false);
     run.key(Key::A, true);
