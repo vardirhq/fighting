@@ -94,6 +94,13 @@ jobs:
           test -f "$RUNNER_TEMP/fighting-pages/pkg/sindri_causeway_bg.wasm"
           grep -q '<base href="/fighting/">' "$RUNNER_TEMP/fighting-pages/index.html"
 
+      - name: Upload exported game for review
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fighting-web-preview
+          path: ${{ runner.temp }}/fighting-pages
+
       - name: Install browser verification tools
         run: |
           npm install --prefix fighting/tests/web --no-audit --no-fund

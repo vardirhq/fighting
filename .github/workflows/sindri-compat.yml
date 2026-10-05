@@ -56,6 +56,7 @@ jobs:
         working-directory: sindri-engine
         run: |
           cargo fmt --manifest-path ../fighting/tests/runtime/Cargo.toml -- --check
+          cp Cargo.lock ../fighting/tests/runtime/Cargo.lock
           cargo test --manifest-path ../fighting/tests/runtime/Cargo.toml --target-dir target
 
       - name: Export project from outside the Sindri repository
