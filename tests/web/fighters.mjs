@@ -28,6 +28,20 @@ function pinkCentre(bytes) {
   return sum / count;
 }
 
+function pinkTop(bytes) {
+  const image = PNG.sync.read(bytes);
+  let top = image.height;
+  for (let y = Math.floor(image.height * 0.30); y < image.height * 0.69; y++) {
+    for (let x = 0; x < image.width; x++) {
+      const i = (y * image.width + x) * 4;
+      const [r, g, b] = image.data.subarray(i, i + 3);
+      if (r > 245 && g > 65 && g < 95 && b > 145 && b < 175) top = Math.min(top, y);
+    }
+  }
+  assert(top < image.height, 'pink fighter must be visible');
+  return top;
+}
+
 // Linear [1, .33, .55] renders as sRGB [255, 155, 196]. Sample that
 // flat meter colour, separate from the room and sprites.
 function pinkBalancePixels(bytes) {
@@ -147,6 +161,19 @@ try {
         const touchShift = pinkCentre(touch) - pinkCentre(beforeTouch);
         console.log('mobile: touch visibly shifted Agnes ' + touchShift.toFixed(2) + ' pixels');
         assert(touchShift < -4, 'touch controls must visibly translate Agnes');
+        // A second finger must jump while the first still owns movement.
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ id: 1, x, y }] });
+        await page.waitForTimeout(80);
+        const jumpX = viewport.width - viewport.height * 0.085;
+        const jumpY = viewport.height * 0.67;
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [
+          { id: 1, x, y }, { id: 2, x: jumpX, y: jumpY },
+        ] });
+        await page.waitForTimeout(180);
+        const jumped = await canvas.screenshot({ path: out + '/mobile-two-finger-jump.png' });
+        assert(pinkTop(jumped) < pinkTop(touch) - 3, 'second touch visibly jumps without releasing movement');
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+
       }
       // Leave practice and observe a real AI bout, including visible balance loss.
       await page.keyboard.press('p');
