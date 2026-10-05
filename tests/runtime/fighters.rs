@@ -25,11 +25,26 @@ impl Run {
     }
 
     fn with_speed(speed: f32) -> Self {
+        Self::configured(speed, false, false)
+    }
+
+    fn combat(ai: bool) -> Self {
+        let mut run = Self::configured(5.0, true, ai);
+        run.frames(80);
+        run
+    }
+
+    fn configured(speed: f32, combat: bool, ai: bool) -> Self {
         let mut authored: serde_json::Value =
             serde_json::from_str(include_str!("../../main.scene.json")).unwrap();
         for entity in authored["entities"].as_array_mut().unwrap() {
             if entity["name"] == "Agnes" || entity["name"] == "Dad" {
-                entity["components"]["sindri.script"]["properties"]["speed"] = speed.into();
+                let is_dad = entity["name"] == "Dad";
+                let properties = &mut entity["components"]["sindri.script"]["properties"];
+                properties["speed"] = speed.into();
+                properties["combat_enabled"] = combat.into();
+                properties["ai_enabled"] = (ai && is_dad).into();
+                properties["sound_enabled"] = false.into();
             }
         }
         let scene = SceneDocument::from_json(&authored.to_string()).unwrap();
@@ -59,6 +74,22 @@ impl Run {
         };
         run.step(DT);
         run
+    }
+
+    fn text(&self, name: &str) -> &str {
+        self.world.get(self.entity(name)).unwrap().components["sindri.ui.text"]["text"]
+            .as_str()
+            .unwrap()
+    }
+
+    fn balance(&self, fighter: &str) -> f32 {
+        self.text(&format!("{fighter} Balance"))
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .trim_end_matches('%')
+            .parse()
+            .unwrap()
     }
 
     fn entity(&self, name: &str) -> EntityId {
@@ -615,4 +646,93 @@ fn dad_uses_256_sheets_and_mirrors_only_the_left_attack_pose() {
         left.components["sindri.animation.sprite"]["clips"]["attack_left"]["frames"],
         right.components["sindri.animation.sprite"]["clips"]["attack_right"]["frames"]
     );
+}
+
+#[test]
+fn punches_have_windup_range_and_only_one_hit_per_swing() {
+    let mut run = Run::combat(false);
+    run.set_x("Agnes", 0.0);
+    run.set_x("Dad", 1.0);
+    run.key(Key::Space, true);
+    run.frames(6);
+    assert_eq!(run.balance("Dad"), 100.0, "windup cannot hit");
+    run.frames(30);
+    run.key(Key::Space, false);
+    run.frames(3);
+    assert_eq!(run.balance("Dad"), 75.0, "one swing hits once");
+    run.frames(40);
+    assert_eq!(run.balance("Dad"), 75.0, "no passive balance damage");
+
+    let mut miss = Run::combat(false);
+    miss.key(Key::Space, true);
+    miss.frames(45);
+    assert_eq!(miss.balance("Dad"), 100.0, "out of reach must miss");
+}
+
+#[test]
+fn a_timed_dodge_avoids_dads_punch_and_has_a_cooldown() {
+    let mut run = Run::combat(false);
+    run.set_x("Agnes", 0.3);
+    run.set_x("Dad", 0.5);
+    run.key(Key::I, true);
+    run.frames(14);
+    run.key(Key::I, false);
+    run.key(Key::K, true);
+    run.step(DT);
+    run.key(Key::K, false);
+    run.frames(14);
+    assert_eq!(
+        run.balance("Agnes"),
+        100.0,
+        "dodge protects during active punch"
+    );
+    assert_eq!(run.text("Dodge Label"), "WAIT");
+    let x = run.x("Agnes");
+    run.key(Key::K, true);
+    run.frames(2);
+    run.key(Key::K, false);
+    assert!(
+        (run.x("Agnes") - x).abs() < 0.01,
+        "cooldown blocks another dodge"
+    );
+    run.frames(60);
+    assert_eq!(run.text("Dodge Label"), "DODGE");
+}
+
+#[test]
+fn ai_closes_distance_telegraphs_and_can_land_a_punch() {
+    let mut run = Run::combat(true);
+    let x = run.x("Dad");
+    run.frames(10);
+    assert!(run.x("Dad") < x, "AI approaches Agnes");
+    run.frames(180);
+    assert!(run.balance("Agnes") < 100.0, "AI must actually attack");
+}
+
+#[test]
+fn three_tumbles_finish_the_match_and_rematch_resets_everything() {
+    let mut run = Run::combat(false);
+    for round in 0..3 {
+        for _ in 0..4 {
+            run.set_x("Agnes", 0.0);
+            run.set_x("Dad", 1.0);
+            run.key(Key::Space, true);
+            run.step(DT);
+            run.key(Key::Space, false);
+            run.frames(45);
+        }
+        if round < 2 {
+            run.frames(120);
+        }
+    }
+    assert!(run.text("Bout Score").starts_with("3  :  0"));
+    assert!(run.text("Bout Notice").contains("Agnes wins"));
+    run.key(Key::R, true);
+    run.step(DT);
+    run.key(Key::R, false);
+    run.frames(80);
+    assert_eq!(run.balance("Agnes"), 100.0);
+    assert_eq!(run.balance("Dad"), 100.0);
+    assert!(run.text("Bout Score").starts_with("0  :  0"));
+    assert_eq!(run.text("Bout Notice"), "");
 }

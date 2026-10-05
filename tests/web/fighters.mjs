@@ -139,7 +139,7 @@ try {
       await page.waitForTimeout(1000);
         const beforeTouch = await canvas.screenshot({ path: out + '/mobile-touch-idle.png' });
         const cdp = await context.newCDPSession(page);
-        const x = viewport.width * 0.2, y = viewport.height * 0.82;
+        const x = viewport.width * 0.2, y = viewport.height * 0.76;
         await cdp.send('Input.dispatchTouchEvent', {
           type: 'touchStart', touchPoints: [{ x, y }],
         });

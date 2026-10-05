@@ -216,15 +216,15 @@ script Player {
         if abs(this.opponent.transform.position.y - this.transform.position.y) > 0.25 { return; }
         if Player.on(this.opponent).dodge_time > 0.0 || Player.on(this.opponent).balance <= 0.0 { return; }
         this.attack_hit = true;
-        this.hit_pause = 0.045;
-        Player.on(this.opponent).receive_hit(this.attack_damage, direction * this.hit_push);
-        Effects.burst_at(this.attack_sparks, this.opponent.transform.position.x, this.opponent.transform.position.y + 1.0);
-        if this.sound_enabled { Audio.play("audio/hit.wav", 0.45); }
+        Player.on(this.opponent).receive_hit(this.attack_damage, direction * this.hit_push, this.entity);
     }
 
-    fn receive_hit(damage: f32, push: f32) {
+    fn receive_hit(damage: f32, push: f32, attacker: Entity) {
         if !this.combat_enabled || Game.practice || Game.phase != 0.0 || this.dodge_time > 0.0 || this.balance <= 0.0 { return; }
         this.balance = max(0.0, this.balance - damage);
+        Player.on(attacker).hit_pause = 0.045;
+        Effects.burst_at(this.attack_sparks, this.transform.position.x, this.transform.position.y + 1.0);
+        if this.sound_enabled { Audio.play("audio/hit.wav", 0.45); }
         this.hurt_time = 0.22;
         this.hit_pause = 0.045;
         this.knock_speed = push;

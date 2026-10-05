@@ -13,6 +13,7 @@ script Bout {
     @export let enabled: bool = true;
     var agnes: Entity = null;
     var dad: Entity = null;
+    var touch_controls: bool = false;
 
     fn start() {
         this.agnes = World.find("Agnes");
@@ -66,6 +67,10 @@ script Bout {
     }
 
     fn hud() {
+        if Touch.count > 0.0 { this.touch_controls = true; }
+        var controls = "A/D: move   K: dodge   Space: attack";
+        if this.touch_controls || Viewport.aspect < 1.0 { controls = "Drag to move / ATTACK + DODGE"; }
+        Ui.set_text(World.find("Control Hint"), controls);
         let span = min(1.9, Viewport.aspect * 1.85);
         World.find("Bout Panel").transform.scale.x = span;
         World.find("Notice Panel").transform.scale.x = span;
