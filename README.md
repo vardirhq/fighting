@@ -14,6 +14,9 @@ The project is pinned to the Sindri revision in `.sindri-engine`, following the 
 
 ## Current slice
 
+- Play Agnes against an AI Dad in first-to-three balance battles.
+- A/D or arrows to move, Space to attack, K to dodge; touch has movement, attack and dodge.
+- P switches to practice mode with manual Dad controls; R restarts a match.
 - Agnes and Dad share a Decay fighter controller, animation timings and shadows.
 - Dad uses the new 256-pixel sheets; his left attack mirrors the right attack.
 - Agnes: A/D or arrows to move horizontally; Space or the touch button to attack.
@@ -24,7 +27,7 @@ The project is pinned to the Sindri revision in `.sindri-engine`, following the 
 - Held input at a room boundary returns to idle when movement is blocked.
 - Movement stays on the carpet plane.
 
-See [fighter behavior and verification](docs/fighters.md).
+See [combat rules](docs/combat.md) and [fighter animation and verification](docs/fighters.md).
 
 The PixelLab sheets are currently treated as 3x3 grids. If a sheet's authored layout differs from that, adjust its sibling `.sheet` document rather than baking crop logic into gameplay.
 

@@ -83,6 +83,7 @@ try {
         document.querySelector('#sindri-error')?.dataset.visible !== 'true'),
         null, { timeout: 60000 });
       assert.deepEqual(errors, [], 'browser startup must succeed');
+      await page.keyboard.press("p");
       await page.waitForTimeout(1000);
       const canvas = page.locator('#sindri-canvas');
       const before = await canvas.screenshot({ path: out + '/' + name + '-idle.png' });
@@ -120,7 +121,8 @@ try {
         await page.waitForFunction(() =>
           !document.querySelector('#sindri-loading') &&
           document.querySelector('#sindri-error')?.dataset.visible !== 'true');
-        await page.waitForTimeout(1000);
+        await page.keyboard.press("p");
+      await page.waitForTimeout(1000);
         const beforeTouch = await canvas.screenshot({ path: out + '/mobile-touch-idle.png' });
         const cdp = await context.newCDPSession(page);
         const x = viewport.width * 0.2, y = viewport.height * 0.82;
@@ -148,6 +150,7 @@ try {
       await page.waitForFunction(() =>
         !document.querySelector('#sindri-loading') &&
         document.querySelector('#sindri-error')?.dataset.visible !== 'true');
+      await page.keyboard.press("p");
       await page.waitForTimeout(500);
       await page.keyboard.down('i');
       await page.waitForTimeout(320);

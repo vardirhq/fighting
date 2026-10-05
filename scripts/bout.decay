@@ -1,0 +1,104 @@
+// Shared round state. Player owns each fighter's live combat fields.
+state Game {
+    var practice: bool = false;
+    var phase: f32 = 1.0; // 0 fighting, 1 between rounds, 2 match finished
+    var pause: f32 = 1.2;
+    var round: f32 = 0.0;
+    var agnes_score: f32 = 0.0;
+    var dad_score: f32 = 0.0;
+    var notice: String = "Ready?";
+}
+
+script Bout {
+    @export let enabled: bool = true;
+    var agnes: Entity = null;
+    var dad: Entity = null;
+
+    fn start() {
+        this.agnes = World.find("Agnes");
+        this.dad = World.find("Dad");
+    }
+
+    fn update(dt: f32) {
+        if !this.enabled { return; }
+        if Input.just_pressed("P") || Ui.is_pressed(World.find("Practice Button")) {
+            Game.practice = !Game.practice;
+            restart_match();
+        }
+        if Input.just_pressed("R") || Ui.is_pressed(World.find("Rematch Button")) {
+            restart_match();
+        }
+        if !Game.practice {
+            if Game.phase == 0.0 {
+                let a = Player.on(this.agnes).balance;
+                let d = Player.on(this.dad).balance;
+                if a <= 0.0 || d <= 0.0 {
+                    Game.phase = 1.0;
+                    Game.pause = 1.8;
+                    Game.notice = "Double tumble!";
+                    if a > 0.0 { Game.agnes_score += 1.0; Game.notice = "Agnes scores a tumble!"; }
+                    else if d > 0.0 { Game.dad_score += 1.0; Game.notice = "Dad scores a tumble!"; }
+                    if Game.agnes_score >= 3.0 || Game.dad_score >= 3.0 {
+                        Game.phase = 2.0;
+                        Game.notice = "Dad wins! Try a rematch";
+                        if Game.agnes_score >= 3.0 { Game.notice = "Agnes wins! Play again?"; }
+                    }
+                }
+            } else if Game.phase == 1.0 {
+                Game.pause = max(0.0, Game.pause - dt);
+                if Game.pause <= 0.0 {
+                    Game.round += 1.0;
+                    Game.phase = 0.0;
+                    Game.notice = "";
+                }
+            }
+        }
+        hud();
+    }
+
+    fn restart_match() {
+        Game.agnes_score = 0.0;
+        Game.dad_score = 0.0;
+        Game.round += 1.0;
+        Game.phase = 1.0;
+        Game.pause = 1.2;
+        Game.notice = "Ready?";
+    }
+
+    fn hud() {
+        let span = min(1.9, Viewport.aspect * 1.85);
+        World.find("Bout Panel").transform.scale.x = span;
+        World.find("Notice Panel").transform.scale.x = span;
+        for name in ["Agnes Balance", "Agnes Track"] { World.find(name).transform.position.x = -span * 0.24; }
+        for name in ["Dad Balance", "Dad Track"] { World.find(name).transform.position.x = span * 0.24; }
+        for name in ["Agnes Track", "Dad Track"] { World.find(name).transform.scale.x = span * 0.40; }
+        let button_x = max(0.20, Viewport.aspect - 0.22);
+        for name in ["Dodge Button", "Dodge Label"] { World.find(name).transform.position.x = -button_x; }
+        for name in ["Attack Button", "Attack Label"] { World.find(name).transform.position.x = button_x; }
+        let a = Player.on(this.agnes).balance;
+        let d = Player.on(this.dad).balance;
+        Ui.set_text(World.find("Agnes Balance"), "AGNES  " + ceil(a) + "%");
+        Ui.set_text(World.find("Dad Balance"), "DAD  " + ceil(d) + "%");
+        Ui.set_text(World.find("Bout Score"), Game.agnes_score + "  :  " + Game.dad_score + "   /   FIRST TO 3");
+        Ui.set_text(World.find("Bout Notice"), Game.notice);
+        World.set_active(World.find("Bout Notice"), Game.notice != "" && !Game.practice);
+        World.set_active(World.find("Notice Panel"), Game.notice != "" && !Game.practice);
+        World.set_active(World.find("Rematch Label"), Game.phase == 2.0 && !Game.practice);
+        World.set_active(World.find("Rematch Button"), Game.phase == 2.0 && !Game.practice);
+        var help = "Bait the punch. Dodge. Counter!";
+        if Game.practice { help = "PRACTICE / Dad: J L + I / P to play"; }
+        Ui.set_text(World.find("Bout Hint"), help);
+        var ready = "DODGE";
+        if Player.on(this.agnes).dodge_cooldown > 0.0 { ready = "WAIT"; }
+        Ui.set_text(World.find("Dodge Label"), ready);
+        meter("Agnes Meter", a / 100.0, -span * 0.24, span * 0.40);
+        meter("Dad Meter", d / 100.0, span * 0.24, span * 0.40);
+    }
+
+    fn meter(name: String, fraction: f32, centre: f32, full: f32) {
+        let width = full * max(0.001, fraction);
+        let bar = World.find(name);
+        bar.transform.scale.x = width;
+        bar.transform.position.x = centre - full * 0.5 + width * 0.5;
+    }
+}

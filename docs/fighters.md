@@ -31,12 +31,12 @@ added, keep ground Y separate from the visual jump offset.
 
 Agnes uses A/D or arrows, Space and the existing touch stick/attack button.
 Dad uses J/L and I. These keyboard controls are a way to test both fighters;
-no AI or combat damage has been added.
+practice mode disables AI and balance damage; see [combat rules](combat.md) for the playable bout.
 
 Facing is decided by opponent X, independent of movement input. At equal X the
 last facing is retained. Crossing sides triggers a three-pose 90 ms turn,
 even while idle, without delaying or pausing held movement. An attack can
-interrupt the visual turn immediately. A side change interrupts an attack so it
+interrupt the visual turn immediately. In practice mode a side change interrupts an attack so it
 cannot keep pointing away from the opponent. Otherwise attacks keep their existing one-shot behavior.
 
 Walking toward the opponent uses the matching facing-direction loop. Walking
