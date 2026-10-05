@@ -7,7 +7,7 @@ const out = process.env.CAPTURE_DIR || 'captures';
 await mkdir(out, { recursive: true });
 const browser = await chromium.launch({
   channel: 'chromium',
-  args: ['--enable-unsafe-webgpu', '--use-angle=swiftshader', '--use-vulkan=swiftshader',
+  args: ['--enable-unsafe-webgpu', '--use-angle=vulkan', '--use-vulkan=swiftshader',
     '--enable-features=Vulkan', '--disable-vulkan-surface'],
 });
 
@@ -39,12 +39,14 @@ try {
       isMobile: name === 'mobile',
     });
     const page = await context.newPage();
+    await page.route('**/favicon.ico', route => route.fulfill({ status: 204 }));
     const errors = [];
     page.on('pageerror', error => {
       errors.push(String(error));
       page.evaluate(() => { window.__fighterBrowserFailed = true; }).catch(() => {});
     });
     page.on('console', message => {
+      console.log(name + ': ' + message.type() + ': ' + message.text());
       if (message.type() === 'error') errors.push(message.text());
     });
     try {
@@ -55,7 +57,8 @@ try {
         document.querySelector('#sindri-error')?.dataset.visible !== 'true'),
         null, { timeout: 60000 });
       assert.deepEqual(errors, [], 'browser startup must succeed');
-      await page.waitForTimeout(300);
+      console.log(name + ': WebGPU adapter ' + JSON.stringify(await page.evaluate(async () => (await navigator.gpu.requestAdapter()).info)));
+      await page.waitForTimeout(1000);
       const canvas = page.locator('#sindri-canvas');
       const before = await canvas.screenshot({ path: out + '/' + name + '-idle.png' });
       await page.keyboard.down('d');
