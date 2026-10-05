@@ -36,7 +36,8 @@ Run the authored gameplay headlessly with sibling checkouts:
 cargo test --manifest-path fighting/tests/runtime/Cargo.toml
 ```
 
-CI additionally loads the exported game in Chromium with software WebGPU at
+CI additionally loads the exported game in pinned Playwright Chromium with
+software WebGPU under Xvfb at
 desktop and portrait mobile sizes. It compares rendered pink-clothing positions
 after keyboard and touch movement, and saves idle, movement and retreat captures
 as `fighting-browser-captures`. Native regressions check real Decay execution,
@@ -45,3 +46,8 @@ inherited pose transforms and frame-perfect shadow synchronization.
 
 Software Chromium evidence does not replace checking a physical Android/iOS
 device's WebGPU driver and touch feel.
+
+Browser verification uses `npm ci` and the committed lockfile. Linux CI runs
+headed Chromium under Xvfb with Vulkan/Mesa libraries and an explicit SwiftShader
+WebGPU adapter. A 64-byte mapped-buffer probe runs before WASM startup and saves
+adapter details alongside captures; adapter failures remain fatal.

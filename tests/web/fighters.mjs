@@ -7,7 +7,9 @@ const out = process.env.CAPTURE_DIR || 'captures';
 await mkdir(out, { recursive: true });
 const browser = await chromium.launch({
   channel: 'chromium',
-  args: ['--enable-unsafe-webgpu', '--use-angle=vulkan', '--use-vulkan=swiftshader',
+  // Linux WebGPU presentation needs a display; CI provides one with Xvfb.
+  headless: false,
+  args: ['--enable-unsafe-webgpu', '--use-webgpu-adapter=swiftshader', '--use-angle=vulkan', '--use-vulkan=swiftshader',
     '--enable-features=Vulkan', '--disable-vulkan-surface'],
 });
 
@@ -50,6 +52,27 @@ try {
       if (message.type() === 'error') errors.push(message.text());
     });
     try {
+      // Probe a real mapped buffer before loading WASM, so a broken CI adapter
+      // produces an actionable failure instead of a secondary Rust panic.
+      await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+      const gpu = await page.evaluate(async () => {
+        const adapter = await navigator.gpu?.requestAdapter();
+        if (!adapter) throw new Error('WebGPU adapter unavailable; check Vulkan/SwiftShader and Xvfb');
+        const device = await adapter.requestDevice();
+        const buffer = device.createBuffer({
+          size: 64, usage: GPUBufferUsage.UNIFORM, mappedAtCreation: true,
+        });
+        new Uint8Array(buffer.getMappedRange()).fill(0);
+        buffer.unmap();
+        buffer.destroy();
+        const info = adapter.info;
+        const result = { vendor: info.vendor, architecture: info.architecture,
+          device: info.device, description: info.description };
+        device.destroy();
+        return result;
+      });
+      console.log(name + ': Chromium ' + browser.version() + ', WebGPU ' + JSON.stringify(gpu));
+      await writeFile(out + '/' + name + '-gpu.json', JSON.stringify(gpu, null, 2));
       await page.goto('http://127.0.0.1:4173/fighting/', { waitUntil: 'networkidle' });
       await page.waitForFunction(() =>
         window.__fighterBrowserFailed || (!document.querySelector('#sindri-loading') &&
@@ -57,7 +80,6 @@ try {
         document.querySelector('#sindri-error')?.dataset.visible !== 'true'),
         null, { timeout: 60000 });
       assert.deepEqual(errors, [], 'browser startup must succeed');
-      console.log(name + ': WebGPU adapter ' + JSON.stringify(await page.evaluate(async () => (await navigator.gpu.requestAdapter()).info)));
       await page.waitForTimeout(1000);
       const canvas = page.locator('#sindri-canvas');
       const before = await canvas.screenshot({ path: out + '/' + name + '-idle.png' });
