@@ -21,7 +21,18 @@ struct Run {
 
 impl Run {
     fn new() -> Self {
-        let scene = SceneDocument::from_json(include_str!("../../main.scene.json")).unwrap();
+        Self::with_speed(5.0)
+    }
+
+    fn with_speed(speed: f32) -> Self {
+        let mut authored: serde_json::Value =
+            serde_json::from_str(include_str!("../../main.scene.json")).unwrap();
+        for entity in authored["entities"].as_array_mut().unwrap() {
+            if entity["name"] == "Agnes" || entity["name"] == "Dad" {
+                entity["components"]["sindri.script"]["properties"]["speed"] = speed.into();
+            }
+        }
+        let scene = SceneDocument::from_json(&authored.to_string()).unwrap();
         let mut components = SceneExtractor::new().unwrap().components().clone();
         components.register::<ScriptComponent>("Script").unwrap();
         let mut sources = ScriptSources::new();
@@ -65,6 +76,15 @@ impl Run {
             .transform_3d
             .unwrap()
             .position[0]
+    }
+
+    fn playback_speed(&self, name: &str) -> f64 {
+        self.world
+            .get(self.active_pose(name))
+            .unwrap()
+            .components["sindri.animation.sprite"]["speed"]
+            .as_f64()
+            .unwrap()
     }
 
     fn set_x(&mut self, name: &str, x: f32) {
@@ -179,6 +199,11 @@ impl Run {
                     self.world.get(shadow).unwrap().components["sindri.sprite"]["layer"],
                     5,
                     "shadows stay below both fighters"
+                );
+                assert_eq!(
+                    self.world.get(shadow).unwrap().components["sindri.animation.sprite"]["speed"],
+                    self.playback_speed(name),
+                    "shadow tempo matches the fighter"
                 );
                 assert!(self.world.is_active(shadow));
                 assert_eq!(self.animations.sprite(shadow), self.animations.sprite(pose));
@@ -420,4 +445,115 @@ fn three_pose_turns_match_their_shadows_and_can_be_interrupted_by_attacks() {
     run.step(DT);
     assert_eq!(run.clip("Agnes"), "attack_left", "attack interrupts pivot");
     assert_eq!(run.clip("Dad"), "attack_right");
+}
+
+#[test]
+fn analog_walk_tempo_tracks_travel_and_changes_without_restarting() {
+    let mut run = Run::new();
+    run.set_x("Dad", 8.0);
+    run.input.apply(InputEvent::TouchStarted {
+        id: 1,
+        x: 120.0,
+        y: 510.0,
+    });
+    run.step(DT);
+    run.input.apply(InputEvent::TouchMoved {
+        id: 1,
+        x: 240.0,
+        y: 510.0,
+    });
+    run.frames(6);
+    let pose = run.active_pose("Agnes");
+    let frame = run.animations.frame(pose).unwrap();
+    assert!(frame > 0, "full speed advances the walk cycle");
+    assert!((run.playback_speed("Agnes") - 1.0).abs() < 0.0001);
+    run.input.apply(InputEvent::TouchMoved {
+        id: 1,
+        x: 180.0,
+        y: 510.0,
+    });
+    let before = run.x("Agnes");
+    run.step(DT);
+    let actual_rate = f64::from((run.x("Agnes") - before).abs() / (DT * 5.0));
+    assert!(
+        actual_rate > 0.0 && actual_rate < 0.75,
+        "gentle input slows steps"
+    );
+    assert!((run.playback_speed("Agnes") - actual_rate).abs() < 0.0001);
+    assert_eq!(run.active_pose("Agnes"), pose);
+    assert!(
+        run.animations.frame(pose).unwrap() >= frame,
+        "tempo change keeps phase"
+    );
+    // Reverse retreat uses the same positive multiplier and reversed frames.
+    run.input.apply(InputEvent::TouchMoved {
+        id: 1,
+        x: 60.0,
+        y: 510.0,
+    });
+    run.step(DT);
+    assert_eq!(run.clip("Agnes"), "back_right");
+    assert!((run.playback_speed("Agnes") - actual_rate).abs() < 0.0001);
+    run.key(Key::Space, true);
+    run.step(DT);
+    assert_eq!(run.clip("Agnes"), "attack_right");
+    assert_eq!(
+        run.playback_speed("Agnes"),
+        1.0,
+        "attack retains its timing"
+    );
+    run.key(Key::Space, false);
+    run.input.apply(InputEvent::TouchEnded { id: 1 });
+    run.frames(40);
+    assert_eq!(run.clip("Agnes"), "idle_right");
+    assert_eq!(run.playback_speed("Agnes"), 1.0);
+}
+
+#[test]
+fn configured_velocity_scales_cadence_for_both_fighters() {
+    let mut run = Run::with_speed(10.0);
+    run.key(Key::A, true);
+    run.key(Key::L, true);
+    run.frames(6);
+    for name in ["Agnes", "Dad"] {
+        assert!((run.playback_speed(name) - 2.0).abs() < 0.0001);
+    }
+    let mut stopped = Run::with_speed(0.0);
+    stopped.key(Key::D, true);
+    stopped.key(Key::J, true);
+    stopped.step(DT);
+    assert_eq!(stopped.clip("Agnes"), "idle_right");
+    assert_eq!(stopped.clip("Dad"), "idle_left");
+}
+
+#[test]
+fn clipped_steps_slow_the_cycle_and_blocked_input_returns_to_idle() {
+    let mut run = Run::new();
+    run.set_x("Agnes", 8.58);
+    run.set_x("Dad", -8.6);
+    run.frames(8);
+    run.key(Key::D, true);
+    run.key(Key::J, true);
+    let before = run.x("Agnes");
+    run.step(DT);
+    let actual_rate = f64::from((run.x("Agnes") - before) / (DT * 5.0));
+    assert!(actual_rate > 0.0 && actual_rate < 0.3);
+    assert!((run.playback_speed("Agnes") - actual_rate).abs() < 0.0001);
+    assert_eq!(
+        run.clip("Dad"),
+        "idle_right",
+        "blocked from the first frame"
+    );
+    run.step(DT);
+    assert_eq!(
+        run.clip("Agnes"),
+        "idle_left",
+        "no walking against boundary"
+    );
+    assert_eq!(run.playback_speed("Agnes"), 1.0);
+    run.key(Key::D, false);
+    run.key(Key::A, true);
+    run.step(DT);
+    assert_eq!(run.clip("Agnes"), "move_left");
+    assert!((run.playback_speed("Agnes") - 1.0).abs() < 0.0001);
 }

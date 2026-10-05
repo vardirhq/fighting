@@ -24,7 +24,7 @@ added, keep ground Y separate from the visual jump offset.
 | --- | --- | --- |
 | Idle | 0.11 | 0.99 s, looping |
 | Turn (three frames) | 0.03 | 0.09 s |
-| Walk / backward walk | 0.07 | 0.63 s, looping |
+| Walk / backward walk at 5 units/s | 0.07 | 0.63 s, looping |
 | Attack | 0.07 | 0.63 s |
 
 Agnes uses A/D or arrows, Space and the existing touch stick/attack button.
@@ -47,6 +47,14 @@ scene entities. The original start/stop PNGs and sheet definitions remain as
 source artwork for possible future reuse. Turn clips select the existing start,
 front-facing pivot and end frames, with identical clips on their shadow taps.
 
+Walk playback speed is actual distance travelled divided by frame time and
+`walk_reference_speed` (5 world units/s by default). At half that velocity the
+cycle runs at half speed; faster configured movement increases the cadence.
+The same multiplier applies to all nine shadow taps without restarting their
+playheads. A clipped final step slows proportionally, and held input at the
+room boundary shows idle when no distance is travelled. Idle, turns and attacks
+reset to their authored timing when shown.
+
 Run the authored gameplay headlessly with sibling checkouts:
 
 ```sh
@@ -59,7 +67,8 @@ desktop and portrait mobile sizes. It compares rendered pink-clothing positions
 after keyboard and touch movement, and saves idle, movement and retreat captures
 as `fighting-browser-captures`. Native regressions check real Decay execution,
 reverse frame progression, immediate starts/stops, movement through turns,
-attacks, ties, horizontal movement, inherited pose transforms and frame-perfect shadow synchronization.
+attacks, ties, horizontal movement, velocity-scaled playback, inherited pose
+transforms and frame-perfect shadow synchronization.
 
 Software Chromium evidence does not replace checking a physical Android/iOS
 device's WebGPU driver and touch feel.

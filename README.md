@@ -19,7 +19,8 @@ The project is pinned to the Sindri revision in `.sindri-engine`, following the 
 - Dad: J/L to move; I to attack.
 - Fighters face their opponent; retreating plays the facing walk loop backwards.
 - Movement starts/stops immediately; three-frame turns last 90 ms without pausing movement.
-- Walk loops use 70 ms per frame.
+- Walk loops use 70 ms per frame at 5 units/s, scaling with actual movement speed.
+- Held input at a room boundary returns to idle when movement is blocked.
 - Movement stays on the carpet plane.
 
 See [fighter behavior and verification](docs/fighters.md).
