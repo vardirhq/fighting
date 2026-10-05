@@ -1,0 +1,19 @@
+{
+  "format_version": 1,
+  "anchor": "bottom",
+  "grid": {
+    "columns": 3,
+    "rows": 3,
+    "names": [
+      "move_left_0",
+      "move_left_1",
+      "move_left_2",
+      "move_left_3",
+      "move_left_4",
+      "move_left_5",
+      "move_left_6",
+      "move_left_7",
+      "move_left_8"
+    ]
+  }
+}

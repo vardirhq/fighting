@@ -15,6 +15,7 @@ The project is pinned to the Sindri revision in `.sindri-engine`, following the 
 ## Current slice
 
 - Agnes and Dad share a Decay fighter controller, animation timings and shadows.
+- Dad uses the new 256-pixel sheets; his left attack mirrors the right attack.
 - Agnes: A/D or arrows to move horizontally; Space or the touch button to attack.
 - Dad: J/L to move; I to attack.
 - Fighters face their opponent; retreating plays the facing walk loop backwards.
@@ -26,3 +27,11 @@ The project is pinned to the Sindri revision in `.sindri-engine`, following the 
 See [fighter behavior and verification](docs/fighters.md).
 
 The PixelLab sheets are currently treated as 3x3 grids. If a sheet's authored layout differs from that, adjust its sibling `.sheet` document rather than baking crop logic into gameplay.
+
+## Repository layout
+
+- `textures/agnes/`: Agnes sprites and adjacent sheet definitions, including unused start/stop source artwork.
+- `textures/dad/`: active 256-pixel Dad sprites and sheet definitions.
+- `textures/dad/archive/`: earlier Dad artwork, preserved for reference.
+- `textures/backgrounds/` and `textures/effects/`: room art and effect textures.
+- `main.scene.json`: scene setup; `scripts/`: gameplay; `tests/`: runtime and browser checks; `docs/`: behavior and rendering notes.

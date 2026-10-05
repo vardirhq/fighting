@@ -186,7 +186,14 @@ impl Run {
             let pose = self.active_pose(name);
             let placed = self.world.world_transform(pose).unwrap();
             assert_eq!(placed.position, root.position, "pose inherits its fighter");
-            assert_eq!(placed.scale, root.scale, "switching poses preserves scale");
+            let mut expected_pose_scale = root.scale;
+            if name == "Dad" && self.clip(name) == "attack_left" {
+                expected_pose_scale[0] = -expected_pose_scale[0];
+            }
+            assert_eq!(
+                placed.scale, expected_pose_scale,
+                "pose sizing or attack mirror"
+            );
             let shadows: Vec<_> = self
                 .world
                 .entities()
@@ -205,6 +212,8 @@ impl Run {
                     self.playback_speed(name),
                     "shadow tempo matches the fighter"
                 );
+                let projection = self.world.world_transform(shadow).unwrap();
+                assert_eq!(projection.scale[0], expected_pose_scale[0]);
                 assert!(self.world.is_active(shadow));
                 assert_eq!(self.animations.sprite(shadow), self.animations.sprite(pose));
             }
@@ -414,15 +423,16 @@ fn three_pose_turns_match_their_shadows_and_can_be_interrupted_by_attacks() {
     let mut run = Run::new();
     for name in ["Agnes", "Dad"] {
         let turn = run.entity(&format!("{name} Turn"));
-        let pivot = if name == "Agnes" { "turn_5" } else { "turn_3" };
+        let pivot = if name == "Agnes" { "turn_5" } else { "turn_4" };
+        let end = if name == "Agnes" { "turn_8" } else { "turn_7" };
         for (id, data) in run.world.entities() {
             if id != turn && data.parent != Some(turn) {
                 continue;
             }
             let clips = &data.components["sindri.animation.sprite"]["clips"];
             for (direction, expected) in [
-                ("right_to_left", ["turn_0", pivot, "turn_8"]),
-                ("left_to_right", ["turn_8", pivot, "turn_0"]),
+                ("right_to_left", ["turn_0", pivot, end]),
+                ("left_to_right", [end, pivot, "turn_0"]),
             ] {
                 let frames: Vec<_> = clips[direction]["frames"]
                     .as_array()
@@ -556,4 +566,53 @@ fn clipped_steps_slow_the_cycle_and_blocked_input_returns_to_idle() {
     run.step(DT);
     assert_eq!(run.clip("Agnes"), "move_left");
     assert!((run.playback_speed("Agnes") - 1.0).abs() < 0.0001);
+}
+
+#[test]
+fn dad_uses_256_sheets_and_mirrors_only_the_left_attack_pose() {
+    let run = Run::new();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for (_, data) in run.world.entities() {
+        if !data
+            .name
+            .as_deref()
+            .is_some_and(|name| name.starts_with("Dad "))
+        {
+            continue;
+        }
+        let sprite = &data.components["sindri.sprite"]["texture"];
+        let reference = sprite.as_str().unwrap();
+        let texture = reference.split('#').next().unwrap();
+        assert!(texture.ends_with("_256.png"), "{reference}");
+        let bytes = std::fs::read(root.join(texture)).unwrap();
+        let width = u32::from_be_bytes(bytes[16..20].try_into().unwrap());
+        let height = u32::from_be_bytes(bytes[20..24].try_into().unwrap());
+        assert_eq!([width, height], [540, 768], "180x256 frames in a 3x3 grid");
+        let sheet: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(root.join(texture.replace(".png", ".sheet"))).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(sheet["anchor"], "bottom");
+        assert_eq!(sheet["grid"]["names"].as_array().unwrap().len(), 9);
+        let clips = data.components["sindri.animation.sprite"]["clips"]
+            .as_object()
+            .unwrap();
+        for clip in clips.values() {
+            for frame in clip["frames"].as_array().unwrap() {
+                assert!(sheet["grid"]["names"].as_array().unwrap().contains(frame));
+            }
+        }
+    }
+    let left = run.world.get(run.entity("Dad Attack Left")).unwrap();
+    let right = run.world.get(run.entity("Dad Attack Right")).unwrap();
+    assert_eq!(
+        left.components["sindri.sprite"]["texture"],
+        right.components["sindri.sprite"]["texture"]
+    );
+    assert_eq!(left.transform_3d.unwrap().scale, [-1.0, 1.0, 1.0]);
+    assert_eq!(right.transform_3d.unwrap().scale, [1.0, 1.0, 1.0]);
+    assert_eq!(
+        left.components["sindri.animation.sprite"]["clips"]["attack_left"]["frames"],
+        right.components["sindri.animation.sprite"]["clips"]["attack_right"]["frames"]
+    );
 }
