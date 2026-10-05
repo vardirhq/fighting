@@ -191,8 +191,7 @@ impl Run {
                 expected_pose_scale[0] = -expected_pose_scale[0];
             }
             assert_eq!(
-                placed.scale,
-                expected_pose_scale,
+                placed.scale, expected_pose_scale,
                 "pose sizing or attack mirror"
             );
             let shadows: Vec<_> = self
@@ -588,11 +587,7 @@ fn dad_uses_256_sheets_and_mirrors_only_the_left_attack_pose() {
         let bytes = std::fs::read(root.join(texture)).unwrap();
         let width = u32::from_be_bytes(bytes[16..20].try_into().unwrap());
         let height = u32::from_be_bytes(bytes[20..24].try_into().unwrap());
-        assert_eq!(
-            [width, height],
-            [540, 768],
-            "180x256 frames in a 3x3 grid"
-        );
+        assert_eq!([width, height], [540, 768], "180x256 frames in a 3x3 grid");
         let sheet: serde_json::Value = serde_json::from_str(
             &std::fs::read_to_string(root.join(texture.replace(".png", ".sheet"))).unwrap(),
         )

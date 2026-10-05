@@ -27,3 +27,11 @@ The project is pinned to the Sindri revision in `.sindri-engine`, following the 
 See [fighter behavior and verification](docs/fighters.md).
 
 The PixelLab sheets are currently treated as 3x3 grids. If a sheet's authored layout differs from that, adjust its sibling `.sheet` document rather than baking crop logic into gameplay.
+
+## Repository layout
+
+- `textures/agnes/`: Agnes sprites and adjacent sheet definitions, including unused start/stop source artwork.
+- `textures/dad/`: active 256-pixel Dad sprites and sheet definitions.
+- `textures/dad/archive/`: earlier Dad artwork, preserved for reference.
+- `textures/backgrounds/` and `textures/effects/`: room art and effect textures.
+- `main.scene.json`: scene setup; `scripts/`: gameplay; `tests/`: runtime and browser checks; `docs/`: behavior and rendering notes.

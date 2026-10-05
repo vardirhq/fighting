@@ -2,7 +2,8 @@
 
 Agnes and Dad use the same `Player` Decay script. Scene properties select the
 fighter name, opponent name, controls and initial facing; each pose and its nine
-shadow taps remain under the fighter's transform. Dad uses the `_256` textures,
+shadow taps remain under the fighter's transform. Agnes assets live in
+`textures/agnes/`; Dad uses the `_256` textures in `textures/dad/`,
 sliced by adjacent bottom-anchored 3x3 `.sheet` files into 180x256 frames.
 
 Both fighters start on the carpet at Y -2.6. Agnes uses scale [3, 3, 1];
@@ -45,7 +46,8 @@ negative animation speed, so reverse loops are authored clips, including all
 shadow taps. Movement enters the loop on the first input frame and returns to
 idle on the first release frame; there are no start/stop animation states or
 scene entities. The original start/stop PNGs and sheet definitions remain as
-source artwork for possible future reuse. Turn clips select the existing start,
+source artwork for possible future reuse. Earlier Dad assets are kept in
+`textures/dad/archive/`. Turn clips select the existing start,
 front-facing pivot and end frames, with identical clips on their shadow taps.
 
 Walk playback speed is actual distance travelled divided by frame time and
