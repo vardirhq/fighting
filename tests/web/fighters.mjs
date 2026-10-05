@@ -14,7 +14,8 @@ const browser = await chromium.launch({
 });
 
 // Sample Agnes's overalls at toddler height; keep the band narrow so the
-// static carpet does not dominate the movement centroid.
+// static carpet does not dominate the movement centroid. The saturated pink
+// filter separates her overalls from the paler carpet behind them.
 // Compare the same resting
 // pose before/after input, so animation wobble cannot pass as translation.
 function pinkCentre(bytes) {
@@ -25,8 +26,8 @@ function pinkCentre(bytes) {
       x < Math.min(image.width, image.width / 2 + image.height * 0.16); x++) {
       const i = (y * image.width + x) * 4;
       const [r, g, b] = image.data.subarray(i, i + 3);
-      if (r > 120 && b > 60 && g < r * 0.65 && b > g * 0.85
-        && r > b * 0.85 && b > r * 0.2) { sum += x; count++; }
+      if (r > 120 && b > 60 && g < r * 0.4 && b > g * 0.85
+        && r > b * 0.85 && b > r * 0.45) { sum += x; count++; }
     }
   }
   assert(count > 30, 'Agnes must visibly render pink clothing');
