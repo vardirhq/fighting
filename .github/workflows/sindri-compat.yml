@@ -63,21 +63,11 @@ jobs:
         working-directory: sindri-engine
         run: cargo run --package sindri-export --bin sindri-export -- ../fighting "$RUNNER_TEMP/fighting-export" --build-id "$GITHUB_SHA"
 
-      - name: Verify export contains gameplay and art
+      - name: Verify export contains gameplay, background, sound and font
         shell: bash
         run: |
           test -f "$RUNNER_TEMP/fighting-export/index.html"
           find "$RUNNER_TEMP/fighting-export/assets" -type f -path '*/scripts/player.decay' -print -quit | grep -q .
           find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'bedroom.png' -print -quit | grep -q .
-          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'agnes_idle_left.png' -print -quit | grep -q .
-          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'agnes_idle_right.png' -print -quit | grep -q .
-          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'agnes_move_left_loop.png' -print -quit | grep -q .
-          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'agnes_move_right_loop.png' -print -quit | grep -q .
-          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'agnes_attack_left.png' -print -quit | grep -q .
-          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'agnes_attack_right.png' -print -quit | grep -q .
-          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'dad_idle_left_256.png' -print -quit | grep -q .
-          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'dad_idle_right_256.png' -print -quit | grep -q .
-          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'dad_move_left_256.png' -print -quit | grep -q .
-          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'dad_move_right_256.png' -print -quit | grep -q .
           find "$RUNNER_TEMP/fighting-export/assets" -type f -path '*/audio/hit.wav' -print -quit | grep -q .
           find "$RUNNER_TEMP/fighting-export/assets" -type f -path '*/fonts/ChakraPetch-Regular.ttf' -print -quit | grep -q .

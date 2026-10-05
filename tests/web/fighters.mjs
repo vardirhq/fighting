@@ -13,25 +13,33 @@ const browser = await chromium.launch({
     '--enable-features=Vulkan', '--disable-vulkan-surface'],
 });
 
-// Sample Agnes's overalls at toddler height; keep the band narrow so the
-// static carpet does not dominate the movement centroid. The saturated pink
-// filter separates her overalls from the paler carpet behind them.
-// Compare the same resting
-// pose before/after input, so animation wobble cannot pass as translation.
+// Flat engine shapes render authored linear [1, .08, .35] as sRGB pink.
 function pinkCentre(bytes) {
   const image = PNG.sync.read(bytes);
   let sum = 0, count = 0;
-  for (let y = Math.floor(image.height * 0.60); y < image.height * 0.65; y++) {
-    for (let x = Math.max(0, Math.floor(image.width / 2 - image.height * 0.34));
-      x < Math.min(image.width, image.width / 2 + image.height * 0.16); x++) {
+  for (let y = Math.floor(image.height * 0.61); y < image.height * 0.65; y++) {
+    for (let x = 0; x < image.width; x++) {
       const i = (y * image.width + x) * 4;
       const [r, g, b] = image.data.subarray(i, i + 3);
-      if (r > 120 && b > 60 && g < r * 0.4 && b > g * 0.85
-        && r > b * 0.85 && b > r * 0.45) { sum += x; count++; }
+      if (r > 245 && g > 65 && g < 95 && b > 145 && b < 175) { sum += x; count++; }
     }
   }
-  assert(count > 30, 'Agnes must visibly render pink clothing');
+  assert(count > 20, 'Agnes must visibly render as a pink shape');
   return sum / count;
+}
+
+function pinkTop(bytes) {
+  const image = PNG.sync.read(bytes);
+  let top = image.height;
+  for (let y = Math.floor(image.height * 0.30); y < image.height * 0.69; y++) {
+    for (let x = 0; x < image.width; x++) {
+      const i = (y * image.width + x) * 4;
+      const [r, g, b] = image.data.subarray(i, i + 3);
+      if (r > 245 && g > 65 && g < 95 && b > 145 && b < 175) top = Math.min(top, y);
+    }
+  }
+  assert(top < image.height, 'pink fighter must be visible');
+  return top;
 }
 
 // Linear [1, .33, .55] renders as sRGB [255, 155, 196]. Sample that
@@ -108,25 +116,20 @@ try {
       await page.waitForTimeout(180);
       const after = await canvas.screenshot({ path: out + '/' + name + '-moved.png' });
       const shift = pinkCentre(after) - pinkCentre(before);
-      console.log(name + ': visible Agnes clothing shifted right ' + shift.toFixed(2) + ' pixels');
+      console.log(name + ': visible Agnes shape shifted right ' + shift.toFixed(2) + ' pixels');
       assert(shift > 4, name + ': held right must visibly translate Agnes');
-      // Capture both overlaps after releasing input so slow screenshots cannot
-      // walk Agnes out of the portrait crop. Native tests assert all pose layers.
-      await page.keyboard.down('d');
+      await page.keyboard.press('w');
+      await page.waitForTimeout(180);
+      await canvas.screenshot({ path: out + '/' + name + '-jump.png' });
+      await page.waitForTimeout(800);
+      await page.keyboard.down('Shift');
       await page.waitForTimeout(120);
-      await page.keyboard.up('d');
-      await page.waitForTimeout(180);
-      await canvas.screenshot({ path: out + '/' + name + '-overlap-left.png' });
-      await page.keyboard.down('d');
-      await page.waitForTimeout(300);
-      await page.keyboard.up('d');
-      await page.waitForTimeout(180);
-      await canvas.screenshot({ path: out + '/' + name + '-overlap-right.png' });
-      await page.keyboard.down('a');
+      await canvas.screenshot({ path: out + '/' + name + '-guard.png' });
+      await page.keyboard.up('Shift');
+      await page.keyboard.press('e');
       await page.waitForTimeout(220);
-      await canvas.screenshot({ path: out + '/' + name + '-retreat.png' });
-      await page.keyboard.up('a');
-      await page.waitForTimeout(180);
+      await canvas.screenshot({ path: out + '/' + name + '-sweep.png' });
+      await page.waitForTimeout(900);
 
       if (name === 'mobile') {
         // Start touch verification from the authored position. Capturing a
@@ -140,7 +143,7 @@ try {
       await page.waitForTimeout(1000);
         const beforeTouch = await canvas.screenshot({ path: out + '/mobile-touch-idle.png' });
         const cdp = await context.newCDPSession(page);
-        const x = viewport.width * 0.2, y = viewport.height * 0.76;
+        const x = viewport.width * 0.35, y = viewport.height * 0.78;
         await cdp.send('Input.dispatchTouchEvent', {
           type: 'touchStart', touchPoints: [{ x, y }],
         });
@@ -149,7 +152,7 @@ try {
         await page.evaluate(() => new Promise(resolve =>
           requestAnimationFrame(() => requestAnimationFrame(resolve))));
         await cdp.send('Input.dispatchTouchEvent', {
-          type: 'touchMove', touchPoints: [{ x: x + 120, y }],
+          type: 'touchMove', touchPoints: [{ x: x - 80, y }],
         });
         await page.waitForTimeout(220);
         await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
@@ -157,33 +160,25 @@ try {
         const touch = await canvas.screenshot({ path: out + '/mobile-touch-moved.png' });
         const touchShift = pinkCentre(touch) - pinkCentre(beforeTouch);
         console.log('mobile: touch visibly shifted Agnes ' + touchShift.toFixed(2) + ' pixels');
-        assert(touchShift > 4, 'touch controls must visibly translate Agnes');
+        assert(touchShift < -4, 'touch controls must visibly translate Agnes');
+        // A second finger must jump while the first still owns movement.
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ id: 1, x, y }] });
+        await page.waitForTimeout(80);
+        const jumpX = viewport.width - viewport.height * 0.085;
+        const jumpY = viewport.height * 0.67;
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [
+          { id: 1, x, y }, { id: 2, x: jumpX, y: jumpY },
+        ] });
+        await page.waitForTimeout(180);
+        const jumped = await canvas.screenshot({ path: out + '/mobile-two-finger-jump.png' });
+        assert(pinkTop(jumped) < pinkTop(touch) - 3, 'second touch visibly jumps without releasing movement');
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+
       }
-      // Review Dad's new sheets in both facing directions. Reload restores
-      // the authored positions, where Dad faces left, before the mirrored punch.
-      await page.reload({ waitUntil: 'networkidle' });
-      await page.waitForFunction(() =>
-        !document.querySelector('#sindri-loading') &&
-        document.querySelector('#sindri-error')?.dataset.visible !== 'true');
-      await page.keyboard.press("p");
-      await page.waitForTimeout(500);
-      await page.keyboard.down('i');
-      await page.waitForTimeout(320);
-      await page.keyboard.up('i');
-      await canvas.screenshot({ path: out + '/' + name + '-dad-attack-left.png' });
-      await page.waitForTimeout(700);
-      // Walk Agnes past Dad so he turns right while staying inside the crop.
-      await page.keyboard.down('d');
-      await page.waitForTimeout(700);
-      await page.keyboard.up('d');
-      await page.waitForTimeout(180);
-      await page.keyboard.down('i');
-      await page.waitForTimeout(320);
-      await page.keyboard.up('i');
-      await canvas.screenshot({ path: out + '/' + name + '-dad-attack-right.png' });
       // Leave practice and observe a real AI bout, including visible balance loss.
       await page.keyboard.press('p');
       await page.keyboard.press('r');
+      await page.waitForTimeout(180);
       const full = pinkBalancePixels(await canvas.screenshot({ path: out + '/' + name + '-bout-ready.png' }));
       assert(full > 20, 'Agnes balance meter must be visible');
       let depleted = false;
@@ -196,7 +191,7 @@ try {
           break;
         }
       }
-      assert(depleted, name + ': AI punch must visibly reduce Agnes balance');
+      assert(depleted, name + ': AI attack must visibly reduce Agnes balance');
       await page.keyboard.press('r');
       await page.waitForTimeout(150);
       const rematch = await canvas.screenshot({ path: out + '/' + name + '-bout-rematch.png' });

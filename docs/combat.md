@@ -1,45 +1,99 @@
-# First playable family bout
+# Combat lab
 
-Play Agnes against an AI Dad. Move with A/D or arrows (drag the touch stick),
-attack with Space or ATTACK, and dodge with K or DODGE. A dodge follows held
-movement; without movement it retreats from the opponent. Balance begins at
-100. Emptying the opponent's balance scores a tumble; first to three wins.
-The winner screen offers a rematch, also available with R. P or the bottom
-practice button switches to the original animation sandbox, with manual Dad
-controls J/L, I to attack, and O to dodge.
+This is a gameplay prototype: only the bedroom background is textured. Fighters,
+shadows, hands, guards and attack telegraphs are native Sindri shapes. Source
+sprite sheets remain in git, but no longer ship or control gameplay. All combat
+runs in Decay, against the unchanged engine revision in `.sindri-engine`.
 
-| Fighter | Reach | Balance damage | Attack duration | Windup | Knockback speed |
-| --- | --- | --- | --- | --- | --- |
-| Agnes | 1.15 | 25 | 0.47 s | 0.16 s | 3.5 |
-| Dad | 1.8 | 34 | 0.74 s | 0.33 s | 5.0 |
+Play Agnes against Dad. First to three rounds wins. Each round lasts 45 seconds;
+a knockout ends it early, otherwise the fighter with more balance wins. A tie
+awards neither fighter a point. R restarts; P toggles manual training, where
+knockouts reset both fighters without awarding points. Ready and round notices
+freeze combat and preserve the knockout silhouette until the next round.
 
-Attack poses retain their authored frame counts; playback rate sets the timings.
-A punch has an 80 ms contact window after its windup, hits only once, and must
-face the target on the same ground line. Combat attacks commit to their initial
-side, allowing a dodge through the opponent. Missing leaves the rest of the
-animation as recovery. Dodges last 220 ms with invulnerability and translation;
-the 850 ms cooldown prevents repeated dodges. Attacks cannot cancel into a dodge.
-Hits interrupt the victim, briefly pause both fighters and synchronized shadows,
-flash the victim, burst particles only on contact, play a generated impact sound,
-and push the victim within the visible arena. Fighters stay inside portrait and
-desktop views during combat. Existing walk cadence still follows actual speed.
+| Action | Keyboard | Touch |
+| --- | --- | --- |
+| Move | A/D or left/right arrows | Drag outside buttons |
+| Jump | W or up arrow | JUMP |
+| Crouch | S or down arrow | Drag down |
+| High guard | Hold left Shift | Hold GUARD |
+| Low guard | Hold crouch + guard | Drag down + hold GUARD |
+| Jab / aerial kick | Space | JAB |
+| Sweep | E | SWEEP |
+| Dodge | K | DODGE |
 
-Dad approaches until within his longer reach, retreats if crowded, and commits
-to visible punches rather than tracking Agnes during windup. Every third attempt
-has a longer hesitation. He does not read future inputs. AI is disabled in
-practice mode. Rounds freeze during the tumble notice, then reset positions,
-balance and combat timers. A double tumble awards neither fighter a point.
+Manual Dad in training: J/L movement, I jab, H sweep, Y jump, N guard,
+M crouch, O dodge. Training retains the complete combat rules, disables AI,
+and automatically restores both fighters after a knockout. It replaces the
+old animation sandbox.
 
-The shared `Game` state and `Bout` script own scores, phase and HUD; live
-`Player` fields own each fighter's combat state. Hits use typed script messages.
-All gameplay lives in Decay. The current artwork stands in for dodge/hurt/tumble
-poses with tint, flash, pause and knockback; dedicated reaction sprites and camera
-shake remain future polish. `audio/hit.wav` is a short synthesized impact, and
-the bundled Chakra Petch font carries its license in `fonts/Fonts-OFL.txt`.
-An inactive audio source named Hit Sound declares the impact clip to the exporter;
-actual playback is requested only when an accepted hit lands.
+## Decisions and timings
 
-CI runs the original controller regressions in practice configuration alongside
-combat tests for startup/range, single hits, dodge cooldown, AI and full matches.
-Native checks also exercise both portrait touch buttons and their screen bounds.
-Browser checks cover desktop/portrait movement and touch, then the real AI bout.
+| Move | Startup | Active | Total | Damage | Reach | Energy |
+| --- | --- | --- | --- | --- | --- | --- |
+| Jab | 120 ms | 100 ms | 340 ms | 12 | Agnes 1.25 / Dad 1.45 | 7 |
+| Sweep | 320 ms | 100 ms | 780 ms | 26 | 1.70 | 24 |
+| Aerial kick | 100 ms | 100 ms | 420 ms | 18 | 1.65 | 14 |
+
+Orange outlined zones show windup; solid red-orange shows the active window;
+faded outlines show recovery. Hits require facing, range and the same ground
+lane. Every swing can hit once. Facing is committed throughout a move; walking
+cannot cancel recovery. Holding an attack key does not repeat it. Inputs buffer
+for 120 ms, including during impact freeze. A confirmed jab can cancel its
+recovery into one sweep, at the sweep's full energy cost and startup. A blocked,
+parried, missed or dodged jab cannot earn that cancel.
+
+Attacking a recovering opponent deals 25% extra damage and displays PUNISH.
+Jabs interrupt sweeps before they become active. Hits cause 55 ms impact freeze,
+recoil and brief hitstun; sweeps hit harder and leave longer recovery. Accepted
+hits play the bundled impact sound. Read these timings as initial tuning, not
+finished balance.
+
+Jumping costs 10 energy, uses a 7-unit/s launch and 18-unit/s² gravity. At more
+than 0.35 units above the carpet a fighter clears sweeps. A jab can still hit
+within 1.05 vertical units; an aerial kick reaches down/up within 1.65 units.
+Aerial attacks are limited to one per jump. Airborne movement can cross the
+opponent after rising above 0.5 units; grounded fighters have 0.68-unit body
+separation. Crouching changes silhouette and movement speed, and selects low
+guard; it does not make a fighter automatically invulnerable.
+
+Guard blocks matching attacks from the front: standing guard stops jabs and
+kicks, crouching guard stops sweeps. The first 85 ms of a newly raised guard
+parry a matching attack, briefly stunning its attacker and restoring 8 energy.
+Holding guard drains 8 energy/s; blocking costs 16 (jab/kick) or 38 (sweep).
+A depleted guard breaks, takes damage, and suffers 600 ms stun. Wrong-height
+guard gets hit. There is no health chip on a successful block.
+
+Dodge costs 22 energy, translates at 7.8 units/s for 280 ms, and has a 650 ms
+cooldown. Its first 120 ms are invulnerable; its end is punishable. It follows
+held movement, otherwise retreats. Dodges pass through bodies but stay inside
+the visible arena. Attacks, hitstun and airborne states cannot cancel into dodge.
+
+Energy restores at 26/s while neutral and not guarding, after a 450 ms delay
+following spending. Move, crouch and jump landing remain available according to
+their state rules; insufficient energy prevents attacks/jumps/dodges. HUD bars
+show health/balance and energy separately.
+
+## Opponent
+
+Dad makes decisions every 220 ms using visible distance, energy and current
+attack phase, not player inputs. He approaches, backs away to recover energy,
+varies jabs and sweeps, occasionally retreats/guards, jumps a telegraphed sweep,
+and tries to punish recovery. He can kick during a jump. His deterministic
+seven-choice cycle makes tests repeatable, but this is a baseline AI: difficulty
+levels, adaptation, additional moves and personality are future experiments.
+
+## Verification
+
+Native tests run the real authored scene and scripts: timing and range, body
+separation, jumping and aerial hits, high/low guard, parry, dodge crossing,
+punish bonus, energy recovery, AI, timed rounds/rematch, training and touch.
+Touch action pads use press-identity capture in the pinned engine (slider
+interaction behind custom shapes), so a second finger can act while the first
+owns the stick. Actions trigger once on press, guard stays held, and release
+does not produce a second attack. Only one action pad can be captured at a time.
+
+Browser checks cover desktop/mobile rendered movement, touch movement, shape
+states, real AI balance loss and rematch. CI exports the project with no fighter
+textures. Archived rendering notes in `docs/legacy/` describe the former sprite
+implementation and are not instructions for this scene.
