@@ -6,6 +6,26 @@ script Player {
     @export let opponent_name: String = "Dad";
     @export let primary_controls: bool = true;
     @export let starts_facing_right: bool = true;
+    @export let combat_enabled: bool = true;
+    @export let ai_enabled: bool = false;
+    @export let sound_enabled: bool = true;
+    @export let attack_reach: f32 = 1.15;
+    @export let attack_damage: f32 = 25.0;
+    @export let attack_rate: f32 = 1.35;
+    @export let hit_push: f32 = 3.5;
+    var balance: f32 = 100.0;
+    var dodge_cooldown: f32 = 0.0;
+    var dodge_time: f32 = 0.0;
+    var dodge_direction: f32 = 0.0;
+    var hurt_time: f32 = 0.0;
+    var hit_pause: f32 = 0.0;
+    var knock_speed: f32 = 0.0;
+    var attack_elapsed: f32 = 0.0;
+    var attack_hit: bool = false;
+    var ai_wait: f32 = 0.65;
+    var ai_attacks: f32 = 0.0;
+    var seen_round: f32 = 0.0;
+    var paused_animation: bool = false;
     var facing_right: bool = true;
     var draw_layer: f32 = -1.0;
     var opponent: Entity = null;
@@ -45,84 +65,186 @@ script Player {
     }
 
     fn update(dt: f32) {
+        if this.combat_enabled && this.seen_round != Game.round { reset_round(); }
         update_layering();
         this.step_cooldown = max(0.0, this.step_cooldown - dt);
+        this.dodge_cooldown = max(0.0, this.dodge_cooldown - dt);
+        this.hurt_time = max(0.0, this.hurt_time - dt);
+        this.hit_pause = max(0.0, this.hit_pause - dt);
+        if this.shown != null {
+            this.shown.sprite.color_offset = Color(0.0, 0.0, 0.0, 0.0);
+            this.shown.sprite.tint = Color(1.0, 1.0, 1.0, 1.0);
+            if this.hurt_time > 0.0 { this.shown.sprite.color_offset = Color(0.6, 0.3, 0.3, 0.0); }
+            if this.dodge_time > 0.0 { this.shown.sprite.tint = Color(0.65, 0.85, 1.0, 0.72); }
+        }
+        if this.combat_enabled && !Game.practice && Game.phase != 0.0 {
+            if this.state != 0.0 { to_idle(); }
+            return;
+        }
+        if this.combat_enabled && this.hit_pause > 0.0 {
+            pose_speed(0.0);
+            this.paused_animation = true;
+            return;
+        }
+        if this.paused_animation {
+            pose_speed(1.0);
+            if this.state == 5.0 { pose_speed(this.attack_rate); }
+            this.paused_animation = false;
+        }
         var move_x = Input.axis("J", "L");
+        var attack = Input.just_pressed("I");
+        var dodge = Input.just_pressed("O");
         if this.primary_controls {
             move_x = Input.axis("A", "D") + Input.axis("ArrowLeft", "ArrowRight");
             if Stick.held && abs(Stick.x) > abs(move_x) { move_x = Stick.x; }
+            attack = Input.just_pressed("Space") || Ui.is_pressed(this.attack_button);
+            dodge = Input.just_pressed("K") || Ui.is_pressed(World.find("Dodge Button"));
+        }
+        if this.ai_enabled && this.combat_enabled && !Game.practice {
+            move_x = 0.0;
+            attack = false;
+            dodge = false;
+            this.ai_wait = max(0.0, this.ai_wait - dt);
+            let gap = this.opponent.transform.position.x - this.transform.position.x;
+            let distance = abs(gap);
+            // Commit to a punch rather than tracking a dodge during its windup.
+            if this.state != 5.0 && this.hurt_time <= 0.0 {
+                if distance > this.attack_reach - 0.25 { move_x = sign(gap) * 0.68; }
+                else if distance < 0.8 { move_x = -sign(gap) * 0.45; }
+                if distance <= this.attack_reach && this.ai_wait <= 0.0 {
+                    attack = true;
+                    move_x = 0.0;
+                    this.ai_attacks += 1.0;
+                    // A deterministic hesitation every third attempt creates openings.
+                    this.ai_wait = 0.9;
+                    if this.ai_attacks >= 3.0 { this.ai_wait = 1.35; this.ai_attacks = 0.0; }
+                }
+            }
         }
         move_x = max(-1.0, min(1.0, move_x));
-        let wants_left = move_x < -0.05;
-        let wants_right = move_x > 0.05;
-        let wants_move = wants_left || wants_right;
-        var attack = Input.just_pressed("I");
-        if this.primary_controls {
-            attack = Input.just_pressed("Space") || Ui.is_pressed(this.attack_button);
+        if this.combat_enabled && this.hurt_time > 0.0 {
+            this.transform.position.x = clamp(this.transform.position.x + this.knock_speed * dt, -arena_limit(), arena_limit());
+            this.knock_speed *= max(0.0, 1.0 - 10.0 * dt);
+            if this.state != 0.0 { to_idle(); }
+            return;
         }
-
-        // Facing follows the opponent, never the input. At an exact tie keep
-        // the previous side so overlapping fighters do not flicker.
+        if this.combat_enabled && dodge && this.dodge_cooldown <= 0.0 && this.state != 5.0 {
+            this.dodge_time = 0.22;
+            this.dodge_cooldown = 0.85;
+            this.dodge_direction = sign(move_x);
+            if abs(move_x) < 0.05 {
+                this.dodge_direction = 1.0;
+                if this.facing_right { this.dodge_direction = -1.0; }
+            }
+            to_idle();
+        }
+        if this.dodge_time > 0.0 {
+            this.transform.position.x = clamp(this.transform.position.x + this.dodge_direction * 8.0 * min(dt, this.dodge_time), -arena_limit(), arena_limit());
+            this.dodge_time = max(0.0, this.dodge_time - dt);
+            update_facing();
+            return;
+        }
         let previous_facing = this.facing_right;
-        update_facing();
+        // An attack commits to its initial side in combat; dodging through it works.
+        if this.state != 5.0 || !this.combat_enabled || Game.practice { update_facing(); }
         let side_changed = this.facing_right != previous_facing;
-        // Turning changes the artwork, never the response to movement input.
-        // Attacks retain their stationary behavior unless a side change cancels one.
         var moved_x = 0.0;
-        if wants_move && ((this.state != 5.0 && !attack) || side_changed) {
+        if abs(move_x) > 0.05 && ((this.state != 5.0 && !attack) || side_changed) {
             let previous_x = this.transform.position.x;
             this.transform.position.x += move_x * this.speed * dt;
-            this.transform.position.x = max(-8.6, min(8.6, this.transform.position.x));
+            var limit = 8.6;
+            if this.combat_enabled && !Game.practice { limit = arena_limit(); }
+            this.transform.position.x = clamp(this.transform.position.x, -limit, limit);
             moved_x = this.transform.position.x - previous_x;
             if moved_x != 0.0 && this.step_cooldown <= 0.0 {
-                Effects.burst_at(this.step_dust,
-                    this.transform.position.x, this.transform.position.y + 0.05);
+                Effects.burst_at(this.step_dust, this.transform.position.x, this.transform.position.y + 0.05);
                 this.step_cooldown = 0.14;
             }
         }
         if side_changed {
-            // A side change takes priority even during an attack.
             this.state = 4.0;
             if this.facing_right { show(this.turn, "left_to_right"); }
             else { show(this.turn, "right_to_left"); }
             return;
         }
-
         if this.state == 5.0 {
-            if !this.attack_sparked && Animation.frame(this.shown) >= this.attack_effect_frame {
-                var reach = -this.transform.scale.x * 0.95 / 4.4;
-                if this.facing_right { reach = this.transform.scale.x * 0.95 / 4.4; }
-                Effects.burst_at(this.attack_sparks,
-                    this.transform.position.x + reach, this.transform.position.y + this.transform.scale.y * 1.7 / 4.4);
+            this.attack_elapsed += dt;
+            if this.combat_enabled && !Game.practice {
+                let windup = this.attack_effect_frame * 0.07 / this.attack_rate;
+                if !this.attack_hit && this.attack_elapsed >= windup && this.attack_elapsed < windup + 0.08 {
+                    try_hit();
+                }
+            } else if !this.attack_sparked && Animation.frame(this.shown) >= this.attack_effect_frame {
+                Effects.burst_at(this.attack_sparks, this.transform.position.x, this.transform.position.y + 1.0);
                 this.attack_sparked = true;
             }
-            if Animation.is_finished(this.shown) {
-                to_idle();
-            }
+            if Animation.is_finished(this.shown) { to_idle(); }
             return;
         }
-
         if attack {
             this.state = 5.0;
+            this.attack_elapsed = 0.0;
+            this.attack_hit = false;
             this.attack_sparked = false;
             if this.facing_right { show(this.attack_right, "attack_right"); }
             else { show(this.attack_left, "attack_left"); }
+            if this.combat_enabled && !Game.practice { pose_speed(this.attack_rate); }
             return;
         }
-
-        if this.state == 4.0 {
-            if !Animation.is_finished(this.shown) { return; }
-        }
+        if this.state == 4.0 && !Animation.is_finished(this.shown) { return; }
         if abs(moved_x) > 0.0 && dt > 0.0 {
             begin_loop(moved_x);
-            // Actual translation includes analog input, configured speed and
-            // boundary clipping. Change tempo without restarting the loop.
-            let rate = abs(moved_x) / (dt * max(0.001, this.walk_reference_speed));
-            Animation.set_speed(this.shown, rate);
-            for i in 0..9 {
-                Animation.set_speed(World.find(this.shown_shadow + " " + i), rate);
-            }
+            pose_speed(abs(moved_x) / (dt * max(0.001, this.walk_reference_speed)));
         } else if this.state != 0.0 { to_idle(); }
+    }
+
+    fn arena_limit() -> f32 {
+        // Fit the full fighter within portrait screens as well as desktops.
+        return max(0.6, min(8.6, Viewport.aspect * 6.0 - this.transform.scale.x * 0.5));
+    }
+
+    fn pose_speed(rate: f32) {
+        Animation.set_speed(this.shown, rate);
+        for i in 0..9 { Animation.set_speed(World.find(this.shown_shadow + " " + i), rate); }
+    }
+
+    fn try_hit() {
+        let gap = this.opponent.transform.position.x - this.transform.position.x;
+        var direction = -1.0;
+        if this.facing_right { direction = 1.0; }
+        if gap * direction < 0.0 || abs(gap) > this.attack_reach { return; }
+        if abs(this.opponent.transform.position.y - this.transform.position.y) > 0.25 { return; }
+        if Player.on(this.opponent).dodge_time > 0.0 || Player.on(this.opponent).balance <= 0.0 { return; }
+        this.attack_hit = true;
+        Player.on(this.opponent).receive_hit(this.attack_damage, direction * this.hit_push, this.entity);
+    }
+
+    fn receive_hit(damage: f32, push: f32, attacker: Entity) {
+        if !this.combat_enabled || Game.practice || Game.phase != 0.0 || this.dodge_time > 0.0 || this.balance <= 0.0 { return; }
+        this.balance = max(0.0, this.balance - damage);
+        Player.on(attacker).hit_pause = 0.045;
+        Effects.burst_at(this.attack_sparks, this.transform.position.x, this.transform.position.y + 1.0);
+        if this.sound_enabled { Audio.play("audio/hit.wav", 0.45); }
+        this.hurt_time = 0.22;
+        this.hit_pause = 0.045;
+        this.knock_speed = push;
+        to_idle();
+    }
+
+    fn reset_round() {
+        this.seen_round = Game.round;
+        this.balance = 100.0;
+        this.dodge_time = 0.0;
+        this.dodge_cooldown = 0.0;
+        this.hurt_time = 0.0;
+        this.hit_pause = 0.0;
+        this.knock_speed = 0.0;
+        this.paused_animation = false;
+        this.ai_wait = 0.65;
+        this.transform.position.x = 1.1;
+        if this.primary_controls { this.transform.position.x = -1.5; }
+        update_facing();
+        to_idle();
     }
 
     fn update_layering() {
@@ -182,7 +304,11 @@ script Player {
     }
 
     fn show(entity: Entity, clip: String) {
-        if this.shown != null { World.set_active(this.shown, false); }
+        if this.shown != null {
+            this.shown.sprite.color_offset = Color(0.0, 0.0, 0.0, 0.0);
+            this.shown.sprite.tint = Color(1.0, 1.0, 1.0, 1.0);
+            World.set_active(this.shown, false);
+        }
         this.shown = entity;
         World.set_active(entity, true);
         Animation.play(entity, clip);

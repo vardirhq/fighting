@@ -25,11 +25,26 @@ impl Run {
     }
 
     fn with_speed(speed: f32) -> Self {
+        Self::configured(speed, false, false)
+    }
+
+    fn combat(ai: bool) -> Self {
+        let mut run = Self::configured(5.0, true, ai);
+        run.frames(80);
+        run
+    }
+
+    fn configured(speed: f32, combat: bool, ai: bool) -> Self {
         let mut authored: serde_json::Value =
             serde_json::from_str(include_str!("../../main.scene.json")).unwrap();
         for entity in authored["entities"].as_array_mut().unwrap() {
             if entity["name"] == "Agnes" || entity["name"] == "Dad" {
-                entity["components"]["sindri.script"]["properties"]["speed"] = speed.into();
+                let is_dad = entity["name"] == "Dad";
+                let properties = &mut entity["components"]["sindri.script"]["properties"];
+                properties["speed"] = speed.into();
+                properties["combat_enabled"] = combat.into();
+                properties["ai_enabled"] = (ai && is_dad).into();
+                properties["sound_enabled"] = false.into();
             }
         }
         let scene = SceneDocument::from_json(&authored.to_string()).unwrap();
@@ -59,6 +74,22 @@ impl Run {
         };
         run.step(DT);
         run
+    }
+
+    fn text(&self, name: &str) -> &str {
+        self.world.get(self.entity(name)).unwrap().components["sindri.ui.text"]["text"]
+            .as_str()
+            .unwrap()
+    }
+
+    fn balance(&self, fighter: &str) -> f32 {
+        self.text(&format!("{fighter} Balance"))
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .trim_end_matches('%')
+            .parse()
+            .unwrap()
     }
 
     fn entity(&self, name: &str) -> EntityId {
@@ -573,10 +604,11 @@ fn dad_uses_256_sheets_and_mirrors_only_the_left_attack_pose() {
     let run = Run::new();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     for (_, data) in run.world.entities() {
-        if !data
-            .name
-            .as_deref()
-            .is_some_and(|name| name.starts_with("Dad "))
+        if !data.components.contains_key("sindri.animation.sprite")
+            || !data
+                .name
+                .as_deref()
+                .is_some_and(|name| name.starts_with("Dad "))
         {
             continue;
         }
@@ -614,5 +646,179 @@ fn dad_uses_256_sheets_and_mirrors_only_the_left_attack_pose() {
     assert_eq!(
         left.components["sindri.animation.sprite"]["clips"]["attack_left"]["frames"],
         right.components["sindri.animation.sprite"]["clips"]["attack_right"]["frames"]
+    );
+}
+
+#[test]
+fn punches_have_windup_range_and_only_one_hit_per_swing() {
+    let mut run = Run::combat(false);
+    run.set_x("Agnes", 0.0);
+    run.set_x("Dad", 1.0);
+    run.key(Key::Space, true);
+    run.frames(6);
+    assert_eq!(run.balance("Dad"), 100.0, "windup cannot hit");
+    run.frames(30);
+    run.key(Key::Space, false);
+    run.frames(3);
+    assert_eq!(run.balance("Dad"), 75.0, "one swing hits once");
+    run.frames(40);
+    assert_eq!(run.balance("Dad"), 75.0, "no passive balance damage");
+
+    let mut miss = Run::combat(false);
+    miss.key(Key::Space, true);
+    miss.frames(45);
+    assert_eq!(miss.balance("Dad"), 100.0, "out of reach must miss");
+}
+
+#[test]
+fn a_timed_dodge_avoids_dads_punch_and_has_a_cooldown() {
+    let mut run = Run::combat(false);
+    run.set_x("Agnes", 0.3);
+    run.set_x("Dad", 0.5);
+    run.key(Key::I, true);
+    run.frames(14);
+    run.key(Key::I, false);
+    run.key(Key::K, true);
+    run.step(DT);
+    run.key(Key::K, false);
+    run.frames(14);
+    assert_eq!(
+        run.balance("Agnes"),
+        100.0,
+        "dodge protects during active punch"
+    );
+    assert_eq!(run.text("Dodge Label"), "WAIT");
+    let x = run.x("Agnes");
+    run.key(Key::K, true);
+    run.frames(2);
+    run.key(Key::K, false);
+    assert!(
+        (run.x("Agnes") - x).abs() < 0.01,
+        "cooldown blocks another dodge"
+    );
+    run.frames(60);
+    assert_eq!(run.text("Dodge Label"), "DODGE");
+}
+
+#[test]
+fn ai_closes_distance_telegraphs_and_can_land_a_punch() {
+    let mut run = Run::combat(true);
+    let x = run.x("Dad");
+    run.frames(10);
+    assert!(run.x("Dad") < x, "AI approaches Agnes");
+    run.frames(180);
+    assert!(run.balance("Agnes") < 100.0, "AI must actually attack");
+}
+
+#[test]
+fn three_tumbles_finish_the_match_and_rematch_resets_everything() {
+    let mut run = Run::combat(false);
+    for round in 0..3 {
+        for _ in 0..4 {
+            run.set_x("Agnes", 0.0);
+            run.set_x("Dad", 1.0);
+            run.key(Key::Space, true);
+            run.step(DT);
+            run.key(Key::Space, false);
+            run.frames(45);
+        }
+        if round < 2 {
+            run.frames(120);
+        }
+    }
+    assert!(run.text("Bout Score").starts_with("3  :  0"));
+    assert!(run.text("Bout Notice").contains("Agnes wins"));
+    run.key(Key::R, true);
+    run.step(DT);
+    run.key(Key::R, false);
+    run.frames(80);
+    assert_eq!(run.balance("Agnes"), 100.0);
+    assert_eq!(run.balance("Dad"), 100.0);
+    assert!(run.text("Bout Score").starts_with("0  :  0"));
+    assert_eq!(run.text("Bout Notice"), "");
+}
+
+#[test]
+fn combat_punches_commit_to_their_side_and_cannot_hit_another_ground_line() {
+    let mut run = Run::combat(false);
+    run.set_x("Agnes", 0.0);
+    run.set_x("Dad", 1.0);
+    run.key(Key::Space, true);
+    run.step(DT);
+    run.key(Key::Space, false);
+    run.set_x("Dad", -0.5);
+    run.frames(20);
+    assert_eq!(run.clip("Agnes"), "attack_right", "punch stays committed");
+    assert_eq!(run.balance("Dad"), 100.0, "no hit behind the attacker");
+
+    let mut separate = Run::combat(false);
+    separate.set_x("Agnes", 0.0);
+    separate.set_x("Dad", 1.0);
+    let dad = separate.entity("Dad");
+    separate
+        .world
+        .get_mut(dad)
+        .unwrap()
+        .transform_3d
+        .as_mut()
+        .unwrap()
+        .position[1] += 0.5;
+    separate.key(Key::Space, true);
+    separate.frames(30);
+    assert_eq!(
+        separate.balance("Dad"),
+        100.0,
+        "another ground line is out of range"
+    );
+}
+
+#[test]
+fn accepted_hits_briefly_pause_both_fighters_then_restore_animation() {
+    let mut run = Run::combat(false);
+    run.set_x("Agnes", 0.0);
+    run.set_x("Dad", 1.0);
+    run.key(Key::Space, true);
+    run.frames(12);
+    assert_eq!(run.playback_speed("Agnes"), 0.0);
+    assert_eq!(run.playback_speed("Dad"), 0.0);
+    run.key(Key::Space, false);
+    run.frames(5);
+    assert!(run.playback_speed("Agnes") > 0.0);
+    assert_eq!(run.balance("Dad"), 75.0);
+}
+
+#[test]
+fn portrait_touch_buttons_fit_and_trigger_dodge_and_attack() {
+    let mut run = Run::combat(false);
+    for name in ["Dodge Button", "Attack Button"] {
+        let rect = run.screen.rect(run.entity(name)).unwrap();
+        assert!(rect.center[0].abs() + rect.size[0] * 0.5 <= 360.0 / 640.0);
+        assert!(rect.center[1].abs() + rect.size[1] * 0.5 <= 1.0);
+    }
+    let tap = |run: &mut Run, name: &str| {
+        let rect = run.screen.rect(run.entity(name)).unwrap();
+        run.input.apply(InputEvent::TouchStarted {
+            id: 2,
+            x: 180.0 + rect.center[0] * 320.0,
+            y: 320.0 - rect.center[1] * 320.0,
+        });
+        run.step(DT);
+        run.input.apply(InputEvent::TouchEnded { id: 2 });
+        run.step(DT);
+    };
+    let before = run.x("Agnes");
+    tap(&mut run, "Dodge Button");
+    assert!(run.x("Agnes") < before, "touch dodge retreats");
+    assert_eq!(run.text("Dodge Label"), "WAIT");
+    run.frames(20);
+    run.set_x("Agnes", 0.0);
+    run.set_x("Dad", 1.0);
+    tap(&mut run, "Attack Button");
+    assert_eq!(run.clip("Agnes"), "attack_right");
+    run.frames(30);
+    assert_eq!(
+        run.balance("Dad"),
+        75.0,
+        "touch attack deals balance damage"
     );
 }

@@ -34,6 +34,21 @@ function pinkCentre(bytes) {
   return sum / count;
 }
 
+// Linear [1, .33, .55] renders as sRGB [255, 155, 196]. Sample that
+// flat meter colour, separate from the room and sprites.
+function pinkBalancePixels(bytes) {
+  const image = PNG.sync.read(bytes);
+  let count = 0;
+  for (let y = Math.floor(image.height * 0.09); y < image.height * 0.12; y++) {
+    for (let x = Math.floor(image.width * 0.02); x < image.width * 0.49; x++) {
+      const i = (y * image.width + x) * 4;
+      const [r, g, b] = image.data.subarray(i, i + 3);
+      if (r > 245 && g > 145 && g < 165 && b > 185 && b < 210) count++;
+    }
+  }
+  return count;
+}
+
 try {
   for (const [name, viewport] of [
     ['desktop', { width: 960, height: 540 }],
@@ -83,6 +98,7 @@ try {
         document.querySelector('#sindri-error')?.dataset.visible !== 'true'),
         null, { timeout: 60000 });
       assert.deepEqual(errors, [], 'browser startup must succeed');
+      await page.keyboard.press("p");
       await page.waitForTimeout(1000);
       const canvas = page.locator('#sindri-canvas');
       const before = await canvas.screenshot({ path: out + '/' + name + '-idle.png' });
@@ -120,10 +136,11 @@ try {
         await page.waitForFunction(() =>
           !document.querySelector('#sindri-loading') &&
           document.querySelector('#sindri-error')?.dataset.visible !== 'true');
-        await page.waitForTimeout(1000);
+        await page.keyboard.press("p");
+      await page.waitForTimeout(1000);
         const beforeTouch = await canvas.screenshot({ path: out + '/mobile-touch-idle.png' });
         const cdp = await context.newCDPSession(page);
-        const x = viewport.width * 0.2, y = viewport.height * 0.82;
+        const x = viewport.width * 0.2, y = viewport.height * 0.76;
         await cdp.send('Input.dispatchTouchEvent', {
           type: 'touchStart', touchPoints: [{ x, y }],
         });
@@ -148,6 +165,7 @@ try {
       await page.waitForFunction(() =>
         !document.querySelector('#sindri-loading') &&
         document.querySelector('#sindri-error')?.dataset.visible !== 'true');
+      await page.keyboard.press("p");
       await page.waitForTimeout(500);
       await page.keyboard.down('i');
       await page.waitForTimeout(320);
@@ -163,6 +181,26 @@ try {
       await page.waitForTimeout(320);
       await page.keyboard.up('i');
       await canvas.screenshot({ path: out + '/' + name + '-dad-attack-right.png' });
+      // Leave practice and observe a real AI bout, including visible balance loss.
+      await page.keyboard.press('p');
+      await page.keyboard.press('r');
+      const full = pinkBalancePixels(await canvas.screenshot({ path: out + '/' + name + '-bout-ready.png' }));
+      assert(full > 20, 'Agnes balance meter must be visible');
+      let depleted = false;
+      for (let attempt = 0; attempt < 12; attempt++) {
+        await page.waitForTimeout(250);
+        const capture = await canvas.screenshot();
+        if (pinkBalancePixels(capture) < full * 0.9) {
+          await writeFile(out + '/' + name + '-bout-hit.png', capture);
+          depleted = true;
+          break;
+        }
+      }
+      assert(depleted, name + ': AI punch must visibly reduce Agnes balance');
+      await page.keyboard.press('r');
+      await page.waitForTimeout(150);
+      const rematch = await canvas.screenshot({ path: out + '/' + name + '-bout-rematch.png' });
+      assert(pinkBalancePixels(rematch) >= full * 0.9, 'rematch restores visible balance');
       assert.deepEqual(errors, [], 'browser must report no runtime errors');
     } finally {
       await page.screenshot({ path: out + '/' + name + '-final.png' });
