@@ -292,7 +292,10 @@ fn touch_moves_only_agnes_horizontally_and_uses_backward_playback() {
     assert_eq!(run.x("Dad"), dad_x, "Dad must not consume Agnes's joystick");
     for fighter in ["Agnes", "Dad"] {
         assert_eq!(
-            run.world.world_transform(run.entity(fighter)).unwrap().position[1],
+            run.world
+                .world_transform(run.entity(fighter))
+                .unwrap()
+                .position[1],
             -2.6
         );
     }
