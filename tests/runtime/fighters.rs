@@ -150,7 +150,6 @@ impl Run {
     fn check_poses_and_shadows(&self) {
         for name in ["Agnes", "Dad"] {
             let root = self.world.world_transform(self.entity(name)).unwrap();
-            assert_eq!(root.position[1], -2.6, "movement stays horizontal");
             let expected_scale = if name == "Dad" {
                 [4.21875, 6.0, 1.0]
             } else {
@@ -169,6 +168,11 @@ impl Run {
                 .collect();
             assert_eq!(shadows.len(), 9);
             for shadow in shadows {
+                assert_eq!(
+                    self.world.get(shadow).unwrap().components["sindri.sprite"]["layer"],
+                    5,
+                    "shadows stay below both fighters"
+                );
                 assert!(self.world.is_active(shadow));
                 assert_eq!(self.animations.sprite(shadow), self.animations.sprite(pose));
             }
@@ -286,8 +290,73 @@ fn touch_moves_only_agnes_horizontally_and_uses_backward_playback() {
     run.frames(12);
     assert!(run.x("Agnes") < agnes_x);
     assert_eq!(run.x("Dad"), dad_x, "Dad must not consume Agnes's joystick");
+    for fighter in ["Agnes", "Dad"] {
+        assert_eq!(
+            run.world.world_transform(run.entity(fighter)).unwrap().position[1],
+            -2.6
+        );
+    }
     assert_eq!(run.clip("Agnes"), "back_right");
     run.input.apply(InputEvent::TouchEnded { id: 1 });
     run.frames(8);
     assert_eq!(run.clip("Agnes"), "idle_right");
+}
+
+#[test]
+fn ground_position_orders_every_pose_with_shorter_fighter_winning_ties() {
+    let mut run = Run::new();
+    let layers = |run: &Run, fighter: &str, expected: i64| {
+        let parent = run.entity(fighter);
+        for (_, data) in run
+            .world
+            .entities()
+            .filter(|(_, data)| data.parent == Some(parent))
+        {
+            assert_eq!(data.components["sindri.sprite"]["layer"], expected);
+        }
+    };
+    layers(&run, "Agnes", 11);
+    layers(&run, "Dad", 10);
+    // X crossings and attack/turn pose switches must preserve the ground tie.
+    run.set_x("Agnes", 1.1);
+    run.key(Key::Space, true);
+    run.frames(14);
+    layers(&run, "Agnes", 11);
+    run.set_x("Agnes", 3.0);
+    run.frames(8);
+    layers(&run, "Agnes", 11);
+    layers(&run, "Dad", 10);
+    let dad = run.entity("Dad");
+    // Dad is physically closer: ground position overrides relative height.
+    run.world
+        .get_mut(dad)
+        .unwrap()
+        .transform_3d
+        .as_mut()
+        .unwrap()
+        .position[1] = -2.8;
+    run.step(DT);
+    layers(&run, "Agnes", 10);
+    layers(&run, "Dad", 11);
+    // A tiny ground difference counts as the same line, avoiding noisy ties.
+    run.world
+        .get_mut(dad)
+        .unwrap()
+        .transform_3d
+        .as_mut()
+        .unwrap()
+        .position[1] = -2.61;
+    run.step(DT);
+    layers(&run, "Agnes", 11);
+    layers(&run, "Dad", 10);
+    run.world
+        .get_mut(dad)
+        .unwrap()
+        .transform_3d
+        .as_mut()
+        .unwrap()
+        .position[1] = -2.4;
+    run.step(DT);
+    layers(&run, "Agnes", 11);
+    layers(&run, "Dad", 10);
 }

@@ -12,6 +12,14 @@ original artwork rather than stretching it into a square. Every pose and its
 shadows inherit that same sizing. Initial X positions are -1.5 and +1.1 to
 keep both resting fighters inside the portrait view.
 
+Fighter overlap uses the root ground Y, never a pose's animated feet or head.
+Lower Y draws in front (layer 11 versus 10). Within 0.02 world units of the
+same carpet line, the shorter fighter draws in front; equal heights use the
+primary fighter as a deterministic final tie-breaker. All eleven poses receive
+the same layer, while shadows remain on layer 5 beneath both fighters. Agnes
+also has layer 11 in the authored scene, before scripts start. If jumping is
+added, keep ground Y separate from the visual jump offset.
+
 | Animation | Seconds per frame | Nine-frame duration |
 | --- | --- | --- |
 | Idle | 0.11 | 0.99 s, looping |
