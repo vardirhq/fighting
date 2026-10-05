@@ -14,11 +14,13 @@ The project is pinned to the Sindri revision in `.sindri-engine`, following the 
 
 ## Current slice
 
-- Bedroom arena background from the committed artwork.
-- Agnes as the playable character.
-- `A` / `D` or left/right arrows move horizontally.
-- `W` / `S` or up/down arrows move on the shallow arena depth.
-- Idle and walk animations switch automatically.
-- Moving left mirrors the right-facing sprite art.
+- Agnes and Dad share a Decay fighter controller, animation timings and shadows.
+- Agnes: A/D or arrows to move horizontally; Space or the touch button to attack.
+- Dad: J/L to move; I to attack.
+- Fighters face their opponent; retreating plays the facing walk loop backwards.
+- Start, stop and turn transitions last 90 ms; walk loops use 70 ms per frame.
+- Movement stays on the carpet plane.
+
+See [fighter behavior and verification](docs/fighters.md).
 
 The PixelLab sheets are currently treated as 3x3 grids. If a sheet's authored layout differs from that, adjust its sibling `.sheet` document rather than baking crop logic into gameplay.

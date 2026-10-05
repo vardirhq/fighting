@@ -52,6 +52,19 @@ jobs:
         working-directory: sindri-engine
         run: cargo run --quiet --package decay-lsp -- --check ../fighting
 
+      - name: Run fighter gameplay regressions
+        working-directory: sindri-engine
+        run: |
+          cargo fmt --manifest-path ../fighting/tests/runtime/Cargo.toml
+          cargo test --manifest-path ../fighting/tests/runtime/Cargo.toml --target-dir target
+
+      - name: Upload formatted regression source
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fighting-formatted-regressions
+          path: fighting/tests/runtime/fighters.rs
+
       - name: Export project from outside the Sindri repository
         working-directory: sindri-engine
         run: cargo run --package sindri-export --bin sindri-export -- ../fighting "$RUNNER_TEMP/fighting-export" --build-id "$GITHUB_SHA"
@@ -68,3 +81,7 @@ jobs:
           find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'agnes_move_right_loop.png' -print -quit | grep -q .
           find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'agnes_attack_left.png' -print -quit | grep -q .
           find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'agnes_attack_right.png' -print -quit | grep -q .
+          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'dad_idle_left.png' -print -quit | grep -q .
+          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'dad_idle_right.png' -print -quit | grep -q .
+          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'dad_move_left_loop.png' -print -quit | grep -q .
+          find "$RUNNER_TEMP/fighting-export/assets" -type f -name 'dad_move_right_loop.png' -print -quit | grep -q .
