@@ -104,6 +104,10 @@ try {
         await cdp.send('Input.dispatchTouchEvent', {
           type: 'touchStart', touchPoints: [{ x, y }],
         });
+        // Stick captures its origin on a game frame, like the native test.
+        // Without this pause both events can arrive before that first frame.
+        await page.evaluate(() => new Promise(resolve =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve))));
         await cdp.send('Input.dispatchTouchEvent', {
           type: 'touchMove', touchPoints: [{ x: x + 65, y }],
         });
