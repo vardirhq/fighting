@@ -604,10 +604,11 @@ fn dad_uses_256_sheets_and_mirrors_only_the_left_attack_pose() {
     let run = Run::new();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     for (_, data) in run.world.entities() {
-        if !data
-            .name
-            .as_deref()
-            .is_some_and(|name| name.starts_with("Dad "))
+        if !data.components.contains_key("sindri.animation.sprite")
+            || !data
+                .name
+                .as_deref()
+                .is_some_and(|name| name.starts_with("Dad "))
         {
             continue;
         }
@@ -735,4 +736,53 @@ fn three_tumbles_finish_the_match_and_rematch_resets_everything() {
     assert_eq!(run.balance("Dad"), 100.0);
     assert!(run.text("Bout Score").starts_with("0  :  0"));
     assert_eq!(run.text("Bout Notice"), "");
+}
+
+#[test]
+fn combat_punches_commit_to_their_side_and_cannot_hit_another_ground_line() {
+    let mut run = Run::combat(false);
+    run.set_x("Agnes", 0.0);
+    run.set_x("Dad", 1.0);
+    run.key(Key::Space, true);
+    run.step(DT);
+    run.key(Key::Space, false);
+    run.set_x("Dad", -0.5);
+    run.frames(20);
+    assert_eq!(run.clip("Agnes"), "attack_right", "punch stays committed");
+    assert_eq!(run.balance("Dad"), 100.0, "no hit behind the attacker");
+
+    let mut separate = Run::combat(false);
+    separate.set_x("Agnes", 0.0);
+    separate.set_x("Dad", 1.0);
+    let dad = separate.entity("Dad");
+    separate
+        .world
+        .get_mut(dad)
+        .unwrap()
+        .transform_3d
+        .as_mut()
+        .unwrap()
+        .position[1] += 0.5;
+    separate.key(Key::Space, true);
+    separate.frames(30);
+    assert_eq!(
+        separate.balance("Dad"),
+        100.0,
+        "another ground line is out of range"
+    );
+}
+
+#[test]
+fn accepted_hits_briefly_pause_both_fighters_then_restore_animation() {
+    let mut run = Run::combat(false);
+    run.set_x("Agnes", 0.0);
+    run.set_x("Dad", 1.0);
+    run.key(Key::Space, true);
+    run.frames(12);
+    assert_eq!(run.playback_speed("Agnes"), 0.0);
+    assert_eq!(run.playback_speed("Dad"), 0.0);
+    run.key(Key::Space, false);
+    run.frames(5);
+    assert!(run.playback_speed("Agnes") > 0.0);
+    assert_eq!(run.balance("Dad"), 75.0);
 }

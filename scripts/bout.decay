@@ -6,11 +6,11 @@ state Game {
     var round: f32 = 0.0;
     var agnes_score: f32 = 0.0;
     var dad_score: f32 = 0.0;
-    var notice: String = "Ready?";
 }
 
 script Bout {
     @export let enabled: bool = true;
+    var notice: String = "Ready?";
     var agnes: Entity = null;
     var dad: Entity = null;
     var touch_controls: bool = false;
@@ -36,13 +36,13 @@ script Bout {
                 if a <= 0.0 || d <= 0.0 {
                     Game.phase = 1.0;
                     Game.pause = 1.8;
-                    Game.notice = "Double tumble!";
-                    if a > 0.0 { Game.agnes_score += 1.0; Game.notice = "Agnes scores a tumble!"; }
-                    else if d > 0.0 { Game.dad_score += 1.0; Game.notice = "Dad scores a tumble!"; }
+                    this.notice = "Double tumble!";
+                    if a > 0.0 { Game.agnes_score += 1.0; this.notice = "Agnes scores a tumble!"; }
+                    else if d > 0.0 { Game.dad_score += 1.0; this.notice = "Dad scores a tumble!"; }
                     if Game.agnes_score >= 3.0 || Game.dad_score >= 3.0 {
                         Game.phase = 2.0;
-                        Game.notice = "Dad wins! Try a rematch";
-                        if Game.agnes_score >= 3.0 { Game.notice = "Agnes wins! Play again?"; }
+                        this.notice = "Dad wins! Try a rematch";
+                        if Game.agnes_score >= 3.0 { this.notice = "Agnes wins! Play again?"; }
                     }
                 }
             } else if Game.phase == 1.0 {
@@ -50,7 +50,7 @@ script Bout {
                 if Game.pause <= 0.0 {
                     Game.round += 1.0;
                     Game.phase = 0.0;
-                    Game.notice = "";
+                    this.notice = "";
                 }
             }
         }
@@ -63,7 +63,7 @@ script Bout {
         Game.round += 1.0;
         Game.phase = 1.0;
         Game.pause = 1.2;
-        Game.notice = "Ready?";
+        this.notice = "Ready?";
     }
 
     fn hud() {
@@ -85,9 +85,9 @@ script Bout {
         Ui.set_text(World.find("Agnes Balance"), "AGNES  " + ceil(a) + "%");
         Ui.set_text(World.find("Dad Balance"), "DAD  " + ceil(d) + "%");
         Ui.set_text(World.find("Bout Score"), Game.agnes_score + "  :  " + Game.dad_score + "   /   FIRST TO 3");
-        Ui.set_text(World.find("Bout Notice"), Game.notice);
-        World.set_active(World.find("Bout Notice"), Game.notice != "" && !Game.practice);
-        World.set_active(World.find("Notice Panel"), Game.notice != "" && !Game.practice);
+        Ui.set_text(World.find("Bout Notice"), this.notice);
+        World.set_active(World.find("Bout Notice"), this.notice != "" && !Game.practice);
+        World.set_active(World.find("Notice Panel"), this.notice != "" && !Game.practice);
         World.set_active(World.find("Rematch Label"), Game.phase == 2.0 && !Game.practice);
         World.set_active(World.find("Rematch Button"), Game.phase == 2.0 && !Game.practice);
         var help = "Bait the punch. Dodge. Counter!";
