@@ -15,6 +15,10 @@ script Player {
     var attack_left: Entity = null;
     var attack_right: Entity = null;
     var attack_button: Entity = null;
+    var step_dust: Entity = null;
+    var attack_sparks: Entity = null;
+    var step_cooldown: f32 = 0.0;
+    var attack_sparked: bool = false;
 
     fn start() {
         this.idle_left = World.find("Agnes Idle Left");
@@ -29,10 +33,13 @@ script Player {
         this.attack_left = World.find("Agnes Attack Left");
         this.attack_right = World.find("Agnes Attack Right");
         this.attack_button = World.find("Attack Button");
+        this.step_dust = World.find("Step Dust");
+        this.attack_sparks = World.find("Attack Sparks");
         show(this.idle_right, "idle_right");
     }
 
     fn update(dt: f32) {
+        this.step_cooldown = max(0.0, this.step_cooldown - dt);
         let key_x = Input.axis("A", "D") + Input.axis("ArrowLeft", "ArrowRight");
         var move_x = key_x;
         if Stick.held && abs(Stick.x) > abs(move_x) { move_x = Stick.x; }
@@ -44,12 +51,20 @@ script Player {
 
         // Attacks remain committed for now; locomotion transitions are cancellable.
         if this.state == 5.0 {
+            if !this.attack_sparked && Animation.frame(this.shown) >= 3.0 {
+                var reach = -0.95;
+                if this.facing_right { reach = 0.95; }
+                Effects.burst_at(this.attack_sparks,
+                    this.transform.position.x + reach, this.transform.position.y + 1.7);
+                this.attack_sparked = true;
+            }
             if Animation.is_finished(this.shown) { to_idle(); }
             return;
         }
 
         if attack {
             this.state = 5.0;
+            this.attack_sparked = false;
             if this.facing_right { show(this.attack_right, "attack_right"); }
             else { show(this.attack_left, "attack_left"); }
             return;
@@ -78,8 +93,14 @@ script Player {
         // before translation, including the frame that starts a new turn.
         // Start, loop and stop clips still move immediately with held input.
         if wants_move {
+            let previous_x = this.transform.position.x;
             this.transform.position.x += move_x * this.speed * dt;
             this.transform.position.x = max(-8.6, min(8.6, this.transform.position.x));
+            if this.transform.position.x != previous_x && this.step_cooldown <= 0.0 {
+                Effects.burst_at(this.step_dust,
+                    this.transform.position.x, this.transform.position.y + 0.05);
+                this.step_cooldown = 0.14;
+            }
         }
 
         if this.state == 1.0 {

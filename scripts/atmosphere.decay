@@ -1,0 +1,22 @@
+// Cosmetic dust uses its own deterministic placement pattern, so ambience
+// never consumes the gameplay random stream.
+script Atmosphere {
+    var dust: Entity = null;
+    var cooldown: f32 = 0.0;
+    var sample: f32 = 0.0;
+
+    fn start() {
+        this.dust = World.find("Window Dust");
+    }
+
+    fn update(dt: f32) {
+        this.cooldown -= dt;
+        if this.cooldown <= 0.0 {
+            this.sample += 1.0;
+            let x = sin(this.sample * 2.399963) * 3.4;
+            let y = 2.1 + sin(this.sample * 4.137) * 1.4;
+            Effects.burst_at(this.dust, x, y);
+            this.cooldown = 0.35;
+        }
+    }
+}
