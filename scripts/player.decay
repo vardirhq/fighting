@@ -5,6 +5,8 @@ script Player {
     @export let primary_controls: bool = true;
     @export let starts_facing_right: bool = true;
     var facing_right: bool = true;
+    var opponent: Entity = null;
+    var walking_backwards: bool = false;
     var state: f32 = 0.0;
     var shown: Entity = null;
     var idle_left: Entity = null;
@@ -26,6 +28,8 @@ script Player {
 
     fn start() {
         this.facing_right = this.starts_facing_right;
+        this.opponent = World.find(this.opponent_name);
+        update_facing();
         this.idle_left = World.find(this.fighter_name + " Idle Left");
         this.idle_right = World.find(this.fighter_name + " Idle Right");
         this.start_left = World.find(this.fighter_name + " Start Left");
@@ -59,7 +63,26 @@ script Player {
             attack = Input.just_pressed("Space") || Ui.is_pressed(this.attack_button);
         }
 
-        // Attacks remain committed for now; locomotion transitions are cancellable.
+        // Facing follows the opponent, never the input. At an exact tie keep
+        // the previous side so overlapping fighters do not flicker.
+        let previous_facing = this.facing_right;
+        update_facing();
+        if this.facing_right != previous_facing {
+            // A side change takes priority even during an attack.
+            this.state = 4.0;
+            if this.facing_right { show(this.turn, "left_to_right"); }
+            else { show(this.turn, "right_to_left"); }
+            return;
+        }
+
+        if this.state == 4.0 {
+            if Animation.is_finished(this.shown) {
+                if wants_move { begin_move(); }
+                else { to_idle(); }
+            }
+            return;
+        }
+
         if this.state == 5.0 {
             if !this.attack_sparked && Animation.frame(this.shown) >= 3.0 {
                 var reach = -0.95;
@@ -77,25 +100,6 @@ script Player {
             this.attack_sparked = false;
             if this.facing_right { show(this.attack_right, "attack_right"); }
             else { show(this.attack_left, "attack_left"); }
-            return;
-        }
-
-        if wants_left && this.facing_right {
-            this.facing_right = false;
-            this.state = 4.0;
-            show(this.turn, "right_to_left");
-            return;
-        }
-        if wants_right && !this.facing_right {
-            this.facing_right = true;
-            this.state = 4.0;
-            show(this.turn, "left_to_right");
-            return;
-        }
-
-        if this.state == 4.0 {
-            if !wants_move { to_idle(); return; }
-            if Animation.is_finished(this.shown) { begin_move(move_x); }
             return;
         }
 
@@ -119,34 +123,51 @@ script Player {
                 return;
             }
             if Animation.is_finished(this.shown) {
-                this.state = 2.0;
-                if this.facing_right { show(this.move_right, "move_right"); }
-                else { show(this.move_left, "move_left"); }
+                begin_loop(move_x);
             }
             return;
         }
 
         if this.state == 3.0 {
-            if wants_move { begin_move(move_x); }
+            if wants_move { begin_move(); }
             else if Animation.is_finished(this.shown) { to_idle(); }
             return;
         }
 
         if wants_move {
-            if this.state == 0.0 { begin_move(move_x); }
+            if this.state == 0.0 { begin_move(); }
+            else if this.state == 2.0 { begin_loop(move_x); }
         } else if this.state == 2.0 {
             begin_stop();
         }
     }
 
-    fn begin_move(move_x: f32) {
+    fn update_facing() {
+        if this.opponent != null {
+            let separation = this.opponent.transform.position.x - this.transform.position.x;
+            if separation > 0.0 { this.facing_right = true; }
+            else if separation < 0.0 { this.facing_right = false; }
+        }
+    }
+
+    fn begin_move() {
         this.state = 1.0;
-        if move_x > 0.0 {
-            this.facing_right = true;
-            show(this.start_right, "start_right");
+        if this.facing_right { show(this.start_right, "start_right"); }
+        else { show(this.start_left, "start_left"); }
+    }
+
+    fn begin_loop(move_x: f32) {
+        let backwards = (move_x < 0.0 && this.facing_right)
+            || (move_x > 0.0 && !this.facing_right);
+        if this.state == 2.0 && backwards == this.walking_backwards { return; }
+        this.state = 2.0;
+        this.walking_backwards = backwards;
+        if this.facing_right {
+            if backwards { show(this.move_right, "back_right"); }
+            else { show(this.move_right, "move_right"); }
         } else {
-            this.facing_right = false;
-            show(this.start_left, "start_left");
+            if backwards { show(this.move_left, "back_left"); }
+            else { show(this.move_left, "move_left"); }
         }
     }
 
@@ -172,6 +193,8 @@ script Player {
         // The projected silhouettes use this pose's sheet and clock. Their
         // parent controls visibility, so hiding the pose hides its shadow too.
         var shadow_name = this.fighter_name + " Shadow " + clip;
+        if entity == this.move_left { shadow_name = this.fighter_name + " Shadow move_left"; }
+        if entity == this.move_right { shadow_name = this.fighter_name + " Shadow move_right"; }
         if entity == this.turn { shadow_name = this.fighter_name + " Shadow turn"; }
         for i in 0..9 {
             let shadow = World.find(shadow_name + " " + i);
