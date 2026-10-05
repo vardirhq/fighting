@@ -15,6 +15,7 @@ The project is pinned to the Sindri revision in `.sindri-engine`, following the 
 ## Current slice
 
 - Agnes and Dad share a Decay fighter controller, animation timings and shadows.
+- Dad uses the new 256-pixel sheets; his left attack mirrors the right attack.
 - Agnes: A/D or arrows to move horizontally; Space or the touch button to attack.
 - Dad: J/L to move; I to attack.
 - Fighters face their opponent; retreating plays the facing walk loop backwards.

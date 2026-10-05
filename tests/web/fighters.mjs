@@ -142,6 +142,27 @@ try {
         console.log('mobile: touch visibly shifted Agnes ' + touchShift.toFixed(2) + ' pixels');
         assert(touchShift > 4, 'touch controls must visibly translate Agnes');
       }
+      // Review Dad's new sheets in both facing directions. Reload restores
+      // the authored positions, where Dad faces left, before the mirrored punch.
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.waitForFunction(() =>
+        !document.querySelector('#sindri-loading') &&
+        document.querySelector('#sindri-error')?.dataset.visible !== 'true');
+      await page.waitForTimeout(500);
+      await page.keyboard.down('i');
+      await page.waitForTimeout(320);
+      await page.keyboard.up('i');
+      await canvas.screenshot({ path: out + '/' + name + '-dad-attack-left.png' });
+      await page.waitForTimeout(700);
+      // Walk Agnes past Dad so he turns right while staying inside the crop.
+      await page.keyboard.down('d');
+      await page.waitForTimeout(700);
+      await page.keyboard.up('d');
+      await page.waitForTimeout(180);
+      await page.keyboard.down('i');
+      await page.waitForTimeout(320);
+      await page.keyboard.up('i');
+      await canvas.screenshot({ path: out + '/' + name + '-dad-attack-right.png' });
       assert.deepEqual(errors, [], 'browser must report no runtime errors');
     } finally {
       await page.screenshot({ path: out + '/' + name + '-final.png' });

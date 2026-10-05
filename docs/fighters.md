@@ -2,13 +2,14 @@
 
 Agnes and Dad use the same `Player` Decay script. Scene properties select the
 fighter name, opponent name, controls and initial facing; each pose and its nine
-shadow taps remain under the fighter's transform. Dad's newly uploaded textures
-are sliced by adjacent bottom-anchored 3x3 `.sheet` files.
+shadow taps remain under the fighter's transform. Dad uses the `_256` textures,
+sliced by adjacent bottom-anchored 3x3 `.sheet` files into 180x256 frames.
 
 Both fighters start on the carpet at Y -2.6. Agnes uses scale [3, 3, 1];
-Dad uses [4.21875, 6, 1], making him twice her authored height. His 90x128
-frames require width/height = 90/128, so the narrower X scale preserves the
-original artwork rather than stretching it into a square. Every pose and its
+Dad uses [4.21875, 6, 1], making him twice her authored height. His 180x256
+frames require width/height = 180/256, so the narrower X scale preserves the
+original artwork rather than stretching it into a square. Dad's 256-pixel frame
+height at scale 6 now matches Agnes's 128-pixel frame height at scale 3. Every pose and its
 shadows inherit that same sizing. Initial X positions are -1.5 and +1.1 to
 keep both resting fighters inside the portrait view.
 
@@ -54,6 +55,16 @@ The same multiplier applies to all nine shadow taps without restarting their
 playheads. A clipped final step slows proportionally, and held input at the
 room boundary shows idle when no distance is travelled. Idle, turns and attacks
 reset to their authored timing when shown.
+
+Dad's three-pose turn uses frames 0, 4 and 7 (reversed for left-to-right);
+frame 8 is deliberately excluded because the uploaded final pose turns back
+toward the camera. All nine frames in his other sheets are used. His left attack
+reuses the right attack sheet with local X scale -1 on that pose only. Shadow
+children inherit the mirror; root movement, layering and attack effect placement
+still use the true facing direction. This also mirrors the asymmetric jacket
+pocket during the left attack; authored left-facing idle/walk/turn stay intact.
+Dad's attack spark starts at frame 4, where the new punch extends, while Agnes
+keeps frame 3.
 
 Run the authored gameplay headlessly with sibling checkouts:
 
