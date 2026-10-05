@@ -6,6 +6,7 @@ state Game {
     var round: f32 = 0.0;
     var agnes_score: f32 = 0.0;
     var dad_score: f32 = 0.0;
+    var clock: f32 = 45.0;
 }
 
 script Bout {
@@ -33,12 +34,13 @@ script Bout {
             if Game.phase == 0.0 {
                 let a = Player.on(this.agnes).balance;
                 let d = Player.on(this.dad).balance;
-                if a <= 0.0 || d <= 0.0 {
+                Game.clock = max(0.0, Game.clock - dt);
+                if a <= 0.0 || d <= 0.0 || Game.clock <= 0.0 {
                     Game.phase = 1.0;
                     Game.pause = 1.8;
-                    this.notice = "Double tumble!";
-                    if a > 0.0 { Game.agnes_score += 1.0; this.notice = "Agnes scores a tumble!"; }
-                    else if d > 0.0 { Game.dad_score += 1.0; this.notice = "Dad scores a tumble!"; }
+                    this.notice = "Draw!";
+                    if a > d { Game.agnes_score += 1.0; this.notice = "Agnes takes the round!"; }
+                    else if d > a { Game.dad_score += 1.0; this.notice = "Dad takes the round!"; }
                     if Game.agnes_score >= 3.0 || Game.dad_score >= 3.0 {
                         Game.phase = 2.0;
                         this.notice = "Dad wins! Try a rematch";
@@ -49,11 +51,13 @@ script Bout {
                 Game.pause = max(0.0, Game.pause - dt);
                 if Game.pause <= 0.0 {
                     Game.round += 1.0;
+                    Game.clock = 45.0;
                     Game.phase = 0.0;
                     this.notice = "";
                 }
             }
         }
+        if Game.practice && (Player.on(this.agnes).balance <= 0.0 || Player.on(this.dad).balance <= 0.0) { Game.round += 1.0; }
         hud();
     }
 
@@ -61,6 +65,7 @@ script Bout {
         Game.agnes_score = 0.0;
         Game.dad_score = 0.0;
         Game.round += 1.0;
+        Game.clock = 45.0;
         Game.phase = 1.0;
         Game.pause = 1.2;
         this.notice = "Ready?";
@@ -68,34 +73,42 @@ script Bout {
 
     fn hud() {
         if Touch.count > 0.0 { this.touch_controls = true; }
-        var controls = "A/D: move   K: dodge   Space: attack";
-        if this.touch_controls || Viewport.aspect < 1.0 { controls = "Drag to move / ATTACK + DODGE"; }
+        var controls = "A/D move | W jump | S low | Shift guard | Space jab | E sweep | K dodge";
+        if this.touch_controls || Viewport.aspect < 1.0 { controls = "Drag left side to move / drag down + GUARD for low guard"; }
         Ui.set_text(World.find("Control Hint"), controls);
-        let span = min(1.9, Viewport.aspect * 1.85);
+        let span = min(2.3, Viewport.aspect * 1.90);
         World.find("Bout Panel").transform.scale.x = span;
         World.find("Notice Panel").transform.scale.x = span;
-        for name in ["Agnes Balance", "Agnes Track"] { World.find(name).transform.position.x = -span * 0.24; }
-        for name in ["Dad Balance", "Dad Track"] { World.find(name).transform.position.x = span * 0.24; }
-        for name in ["Agnes Track", "Dad Track"] { World.find(name).transform.scale.x = span * 0.40; }
-        let button_x = max(0.20, Viewport.aspect - 0.22);
-        for name in ["Dodge Button", "Dodge Label"] { World.find(name).transform.position.x = -button_x; }
-        for name in ["Attack Button", "Attack Label"] { World.find(name).transform.position.x = button_x; }
+        for name in ["Agnes Balance", "Agnes Track", "Agnes Stamina", "Agnes Energy Track"] { World.find(name).transform.position.x = -span * 0.24; }
+        for name in ["Dad Balance", "Dad Track", "Dad Stamina", "Dad Energy Track"] { World.find(name).transform.position.x = span * 0.24; }
+        for name in ["Agnes Track", "Dad Track", "Agnes Energy Track", "Dad Energy Track"] { World.find(name).transform.scale.x = span * 0.40; }
+        let button_x = max(0.20, Viewport.aspect - 0.17);
+        for name in ["Dodge Button", "Dodge Label", "Guard Button", "Guard Label"] { World.find(name).transform.position.x = -button_x; }
+        for name in ["Attack Button", "Attack Label", "Heavy Button", "Heavy Label", "Jump Button", "Jump Label"] { World.find(name).transform.position.x = button_x; }
         let a = Player.on(this.agnes).balance;
         let d = Player.on(this.dad).balance;
         Ui.set_text(World.find("Agnes Balance"), "AGNES  " + ceil(a) + "%");
         Ui.set_text(World.find("Dad Balance"), "DAD  " + ceil(d) + "%");
-        Ui.set_text(World.find("Bout Score"), Game.agnes_score + "  :  " + Game.dad_score + "   /   FIRST TO 3");
+        Ui.set_text(World.find("Bout Score"), Game.agnes_score + "  :  " + Game.dad_score + " / " + ceil(Game.clock) + "s / FIRST TO 3");
         Ui.set_text(World.find("Bout Notice"), this.notice);
         World.set_active(World.find("Bout Notice"), this.notice != "" && !Game.practice);
         World.set_active(World.find("Notice Panel"), this.notice != "" && !Game.practice);
         World.set_active(World.find("Rematch Label"), Game.phase == 2.0 && !Game.practice);
         World.set_active(World.find("Rematch Button"), Game.phase == 2.0 && !Game.practice);
-        var help = "Bait the punch. Dodge. Counter!";
-        if Game.practice { help = "PRACTICE / Dad: J L + I / P to play"; }
+        var help = "Jump sweeps. Punish misses. Guard high or low.";
+        if Game.practice { help = "TRAINING: Dad J/L I/H Y N/M O | P to fight"; }
         Ui.set_text(World.find("Bout Hint"), help);
         var ready = "DODGE";
-        if Player.on(this.agnes).dodge_cooldown > 0.0 { ready = "WAIT"; }
+        if Player.on(this.agnes).dodge_cooldown > 0.0 || Player.on(this.agnes).stamina < 22.0 { ready = "WAIT"; }
         Ui.set_text(World.find("Dodge Label"), ready);
+        Ui.set_text(World.find("Agnes Stamina"), "ENERGY " + ceil(Player.on(this.agnes).stamina));
+        Ui.set_text(World.find("Dad Stamina"), "ENERGY " + ceil(Player.on(this.dad).stamina));
+        meter("Agnes Energy Meter", Player.on(this.agnes).stamina / 100.0, -span * 0.24, span * 0.40);
+        meter("Dad Energy Meter", Player.on(this.dad).stamina / 100.0, span * 0.24, span * 0.40);
+        var feedback = "";
+        if Player.on(this.agnes).feedback_time > 0.0 { feedback = Player.on(this.agnes).feedback; }
+        if Player.on(this.dad).feedback_time > 0.0 { feedback = Player.on(this.dad).feedback; }
+        Ui.set_text(World.find("Fight Feedback"), feedback);
         meter("Agnes Meter", a / 100.0, -span * 0.24, span * 0.40);
         meter("Dad Meter", d / 100.0, span * 0.24, span * 0.40);
     }

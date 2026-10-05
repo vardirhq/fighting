@@ -20,21 +20,13 @@ struct Run {
 }
 
 impl Run {
-    fn new() -> Self {
-        Self::with_speed(5.0)
-    }
-
-    fn with_speed(speed: f32) -> Self {
-        Self::configured(speed, false, false)
-    }
-
     fn combat(ai: bool) -> Self {
-        let mut run = Self::configured(5.0, true, ai);
+        let mut run = Self::configured(4.2, ai);
         run.frames(80);
         run
     }
 
-    fn configured(speed: f32, combat: bool, ai: bool) -> Self {
+    fn configured(speed: f32, ai: bool) -> Self {
         let mut authored: serde_json::Value =
             serde_json::from_str(include_str!("../../main.scene.json")).unwrap();
         for entity in authored["entities"].as_array_mut().unwrap() {
@@ -42,7 +34,7 @@ impl Run {
                 let is_dad = entity["name"] == "Dad";
                 let properties = &mut entity["components"]["sindri.script"]["properties"];
                 properties["speed"] = speed.into();
-                properties["combat_enabled"] = combat.into();
+
                 properties["ai_enabled"] = (ai && is_dad).into();
                 properties["sound_enabled"] = false.into();
             }
@@ -109,15 +101,6 @@ impl Run {
             .position[0]
     }
 
-    fn playback_speed(&self, name: &str) -> f64 {
-        self.world
-            .get(self.active_pose(name))
-            .unwrap()
-            .components["sindri.animation.sprite"]["speed"]
-            .as_f64()
-            .unwrap()
-    }
-
     fn set_x(&mut self, name: &str, x: f32) {
         let id = self.entity(name);
         self.world
@@ -160,7 +143,6 @@ impl Run {
             .unwrap();
         self.effects.advance(Duration::from_secs_f32(dt));
         self.input.begin_frame(Duration::from_secs_f32(dt));
-        self.check_poses_and_shadows();
     }
 
     fn frames(&mut self, count: usize) {
@@ -169,656 +151,380 @@ impl Run {
         }
     }
 
-    fn active_pose(&self, fighter: &str) -> EntityId {
-        let parent = self.entity(fighter);
-        let poses: Vec<_> = self
-            .world
-            .entities()
-            .filter(|(id, data)| {
-                data.parent == Some(parent)
-                    && self.world.is_active(*id)
-                    && data.components.contains_key("sindri.animation.sprite")
-            })
-            .map(|(id, _)| id)
-            .collect();
-        assert_eq!(
-            poses.len(),
-            1,
-            "{fighter} must have exactly one visible pose"
-        );
-        poses[0]
+    fn tap(&mut self, key: Key) {
+        self.key(key, true);
+        self.step(DT);
+        self.key(key, false);
     }
-
-    fn clip(&self, fighter: &str) -> &str {
+    fn close(&mut self) {
+        self.set_x("Agnes", 0.0);
+        self.set_x("Dad", 1.0);
+        self.frames(1);
+    }
+    fn energy(&self, name: &str) -> f32 {
+        self.text(&format!("{name} Stamina"))
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .parse()
+            .unwrap()
+    }
+    fn height(&self, name: &str) -> f32 {
         self.world
-            .get(self.active_pose(fighter))
+            .get(self.entity(name))
             .unwrap()
-            .components["sindri.animation.sprite"]["playing"]
-            .as_str()
+            .transform_3d
             .unwrap()
+            .position[1]
     }
-
-    fn check_poses_and_shadows(&self) {
-        for name in ["Agnes", "Dad"] {
-            let root = self.world.world_transform(self.entity(name)).unwrap();
-            let expected_scale = if name == "Dad" {
-                [4.21875, 6.0, 1.0]
-            } else {
-                [3.0, 3.0, 1.0]
-            };
-            assert_eq!(root.scale, expected_scale);
-            let parent = self.entity(name);
-            let poses: Vec<_> = self
-                .world
-                .entities()
-                .filter(|(_, data)| data.parent == Some(parent))
-                .collect();
-            assert_eq!(poses.len(), 7, "no start/stop entities remain");
-            let pose = self.active_pose(name);
-            let placed = self.world.world_transform(pose).unwrap();
-            assert_eq!(placed.position, root.position, "pose inherits its fighter");
-            let mut expected_pose_scale = root.scale;
-            if name == "Dad" && self.clip(name) == "attack_left" {
-                expected_pose_scale[0] = -expected_pose_scale[0];
-            }
-            assert_eq!(
-                placed.scale, expected_pose_scale,
-                "pose sizing or attack mirror"
-            );
-            let shadows: Vec<_> = self
-                .world
-                .entities()
-                .filter(|(_, data)| data.parent == Some(pose))
-                .map(|(id, _)| id)
-                .collect();
-            assert_eq!(shadows.len(), 9);
-            for shadow in shadows {
-                assert_eq!(
-                    self.world.get(shadow).unwrap().components["sindri.sprite"]["layer"],
-                    5,
-                    "shadows stay below both fighters"
-                );
-                assert_eq!(
-                    self.world.get(shadow).unwrap().components["sindri.animation.sprite"]["speed"],
-                    self.playback_speed(name),
-                    "shadow tempo matches the fighter"
-                );
-                let projection = self.world.world_transform(shadow).unwrap();
-                assert_eq!(projection.scale[0], expected_pose_scale[0]);
-                assert!(self.world.is_active(shadow));
-                assert_eq!(self.animations.sprite(shadow), self.animations.sprite(pose));
-            }
+    fn touch(&mut self, name: &str, down: bool) {
+        let rect = self.screen.rect(self.entity(name)).unwrap();
+        if down {
+            self.input.apply(InputEvent::TouchStarted {
+                id: 2,
+                x: 180.0 + rect.center[0] * 320.0,
+                y: 320.0 - rect.center[1] * 320.0,
+            });
+        } else {
+            self.input.apply(InputEvent::TouchEnded { id: 2 });
         }
+        self.step(DT);
     }
 }
 
 #[test]
-fn both_fighters_retreat_facing_the_opponent_and_reverse_the_actual_frames() {
-    let mut run = Run::new();
-    assert_eq!(run.clip("Agnes"), "idle_right");
-    assert_eq!(run.clip("Dad"), "idle_left");
-    run.key(Key::A, true);
-    run.key(Key::L, true);
-    run.step(DT);
-    assert_eq!(run.clip("Agnes"), "back_right", "no start transition");
-    assert_eq!(run.clip("Dad"), "back_left", "no start transition");
-    run.frames(11);
-    assert!(run.x("Agnes") < -1.5);
-    assert!(run.x("Dad") > 1.1);
-    assert_eq!(run.clip("Agnes"), "back_right");
-    assert_eq!(run.clip("Dad"), "back_left");
+fn scene_uses_shapes_and_keeps_only_the_background_sprite() {
+    let mut run = Run::combat(false);
+    assert_eq!(
+        run.world
+            .entities()
+            .filter(|(_, e)| e.components.contains_key("sindri.sprite"))
+            .count(),
+        1
+    );
     for name in ["Agnes", "Dad"] {
-        let mut seen = Vec::new();
-        for _ in 0..5 {
-            seen.push(
-                run.animations
-                    .sprite(run.active_pose(name))
-                    .unwrap()
-                    .to_owned(),
-            );
-            run.step(0.07);
-        }
-        for pair in seen.windows(2) {
-            let last = |s: &str| s.rsplit('_').next().unwrap().parse::<usize>().unwrap();
-            assert_eq!(last(&pair[1]), (last(&pair[0]) + 8) % 9);
-        }
-    }
-    run.key(Key::A, false);
-    run.key(Key::L, false);
-    run.key(Key::D, true);
-    run.key(Key::J, true);
-    run.step(DT);
-    assert_eq!(run.clip("Agnes"), "move_right");
-    assert_eq!(run.clip("Dad"), "move_left");
-    run.key(Key::D, false);
-    run.key(Key::J, false);
-    run.step(DT);
-    assert_eq!(run.clip("Agnes"), "idle_right", "no stop transition");
-    assert_eq!(run.clip("Dad"), "idle_left", "no stop transition");
-}
-
-#[test]
-fn crossing_sides_turns_both_fighters_without_blocking_movement() {
-    let mut run = Run::new();
-    run.set_x("Agnes", 3.0);
-    run.set_x("Dad", -3.0);
-    run.key(Key::A, true);
-    run.key(Key::L, true);
-    run.step(DT);
-    assert!(run.x("Agnes") < 3.0, "movement on the first turn frame");
-    assert!(run.x("Dad") > -3.0);
-    assert_eq!(run.clip("Agnes"), "right_to_left");
-    assert_eq!(run.clip("Dad"), "left_to_right");
-    run.frames(4);
-    assert!(run.x("Agnes") < 2.6, "movement throughout the turn");
-    assert!(run.x("Dad") > -2.6);
-    let agnes_x = run.x("Agnes");
-    let dad_x = run.x("Dad");
-    run.key(Key::A, false);
-    run.key(Key::L, false);
-    run.frames(3);
-    assert_eq!(
-        run.x("Agnes"),
-        agnes_x,
-        "release stops translation immediately"
-    );
-    assert_eq!(run.x("Dad"), dad_x);
-    assert_eq!(run.clip("Agnes"), "idle_left");
-    assert_eq!(run.clip("Dad"), "idle_right");
-    run.set_x("Agnes", 0.0);
-    run.set_x("Dad", 0.0);
-    run.frames(8);
-    assert_eq!(
-        run.clip("Agnes"),
-        "idle_left",
-        "ties keep the previous facing"
-    );
-    assert_eq!(run.clip("Dad"), "idle_right");
-}
-
-#[test]
-fn attacks_face_the_opponent_and_side_changes_take_priority() {
-    let mut run = Run::new();
-    run.key(Key::Space, true);
-    run.key(Key::I, true);
-    run.step(DT);
-    assert_eq!(run.clip("Agnes"), "attack_right");
-    assert_eq!(run.clip("Dad"), "attack_left");
-    run.frames(14);
-    assert!(run.effects.live() > 0, "attack effects fired");
-    run.set_x("Agnes", 3.0);
-    run.set_x("Dad", -3.0);
-    run.step(DT);
-    assert_eq!(run.clip("Agnes"), "right_to_left");
-    assert_eq!(run.clip("Dad"), "left_to_right");
-    run.frames(8);
-    assert_eq!(run.clip("Agnes"), "idle_left");
-    assert_eq!(run.clip("Dad"), "idle_right");
-}
-
-#[test]
-fn touch_moves_only_agnes_horizontally_and_uses_backward_playback() {
-    let mut run = Run::new();
-    let dad_x = run.x("Dad");
-    let agnes_x = run.x("Agnes");
-    run.input.apply(InputEvent::TouchStarted {
-        id: 1,
-        x: 120.0,
-        y: 510.0,
-    });
-    run.step(DT);
-    run.input.apply(InputEvent::TouchMoved {
-        id: 1,
-        x: 55.0,
-        y: 510.0,
-    });
-    run.frames(12);
-    assert!(run.x("Agnes") < agnes_x);
-    assert_eq!(run.x("Dad"), dad_x, "Dad must not consume Agnes's joystick");
-    for fighter in ["Agnes", "Dad"] {
-        assert_eq!(
+        assert!(
             run.world
-                .world_transform(run.entity(fighter))
+                .get(run.entity(&format!("{name} Body")))
                 .unwrap()
-                .position[1],
-            -2.6
+                .components
+                .contains_key("sindri.shape")
         );
     }
-    assert_eq!(run.clip("Agnes"), "back_right");
-    run.input.apply(InputEvent::TouchEnded { id: 1 });
-    run.frames(8);
-    assert_eq!(run.clip("Agnes"), "idle_right");
-}
-
-#[test]
-fn ground_position_orders_every_pose_with_shorter_fighter_winning_ties() {
-    let mut run = Run::new();
-    let layers = |run: &Run, fighter: &str, expected: i64| {
-        let parent = run.entity(fighter);
-        for (_, data) in run
-            .world
-            .entities()
-            .filter(|(_, data)| data.parent == Some(parent))
-        {
-            assert_eq!(data.components["sindri.sprite"]["layer"], expected);
-        }
-    };
-    layers(&run, "Agnes", 11);
-    layers(&run, "Dad", 10);
-    // X crossings and attack/turn pose switches must preserve the ground tie.
-    run.set_x("Agnes", 1.1);
-    run.key(Key::Space, true);
-    run.frames(14);
-    layers(&run, "Agnes", 11);
-    run.set_x("Agnes", 3.0);
-    run.frames(8);
-    layers(&run, "Agnes", 11);
-    layers(&run, "Dad", 10);
-    let dad = run.entity("Dad");
-    // Dad is physically closer: ground position overrides relative height.
-    run.world
-        .get_mut(dad)
-        .unwrap()
-        .transform_3d
-        .as_mut()
-        .unwrap()
-        .position[1] = -2.8;
-    run.step(DT);
-    layers(&run, "Agnes", 10);
-    layers(&run, "Dad", 11);
-    // A tiny ground difference counts as the same line, avoiding noisy ties.
-    run.world
-        .get_mut(dad)
-        .unwrap()
-        .transform_3d
-        .as_mut()
-        .unwrap()
-        .position[1] = -2.61;
-    run.step(DT);
-    layers(&run, "Agnes", 11);
-    layers(&run, "Dad", 10);
-    run.world
-        .get_mut(dad)
-        .unwrap()
-        .transform_3d
-        .as_mut()
-        .unwrap()
-        .position[1] = -2.4;
-    run.step(DT);
-    layers(&run, "Agnes", 11);
-    layers(&run, "Dad", 10);
-}
-
-#[test]
-fn three_pose_turns_match_their_shadows_and_can_be_interrupted_by_attacks() {
-    let mut run = Run::new();
-    for name in ["Agnes", "Dad"] {
-        let turn = run.entity(&format!("{name} Turn"));
-        let pivot = if name == "Agnes" { "turn_5" } else { "turn_4" };
-        let end = if name == "Agnes" { "turn_8" } else { "turn_7" };
-        for (id, data) in run.world.entities() {
-            if id != turn && data.parent != Some(turn) {
-                continue;
-            }
-            let clips = &data.components["sindri.animation.sprite"]["clips"];
-            for (direction, expected) in [
-                ("right_to_left", ["turn_0", pivot, end]),
-                ("left_to_right", [end, pivot, "turn_0"]),
-            ] {
-                let frames: Vec<_> = clips[direction]["frames"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|frame| frame.as_str().unwrap())
-                    .collect();
-                assert_eq!(frames, expected);
-                assert_eq!(clips[direction]["seconds_per_frame"], 0.03);
-            }
-        }
-    }
-    run.set_x("Agnes", 3.0);
-    run.set_x("Dad", -3.0);
-    run.step(DT);
-    assert_eq!(run.clip("Agnes"), "right_to_left");
-    assert_eq!(run.clip("Dad"), "left_to_right");
-    run.key(Key::Space, true);
-    run.key(Key::I, true);
-    run.step(DT);
-    assert_eq!(run.clip("Agnes"), "attack_left", "attack interrupts pivot");
-    assert_eq!(run.clip("Dad"), "attack_right");
-}
-
-#[test]
-fn analog_walk_tempo_tracks_travel_and_changes_without_restarting() {
-    let mut run = Run::new();
-    run.set_x("Dad", 8.0);
-    run.input.apply(InputEvent::TouchStarted {
-        id: 1,
-        x: 120.0,
-        y: 510.0,
-    });
-    run.step(DT);
-    run.input.apply(InputEvent::TouchMoved {
-        id: 1,
-        x: 240.0,
-        y: 510.0,
-    });
-    run.frames(6);
-    let pose = run.active_pose("Agnes");
-    let frame = run.animations.frame(pose).unwrap();
-    assert!(frame > 0, "full speed advances the walk cycle");
-    assert!((run.playback_speed("Agnes") - 1.0).abs() < 0.0001);
-    run.input.apply(InputEvent::TouchMoved {
-        id: 1,
-        x: 180.0,
-        y: 510.0,
-    });
-    let before = run.x("Agnes");
-    run.step(DT);
-    let actual_rate = f64::from((run.x("Agnes") - before).abs() / (DT * 5.0));
-    assert!(
-        actual_rate > 0.0 && actual_rate < 0.75,
-        "gentle input slows steps"
-    );
-    assert!((run.playback_speed("Agnes") - actual_rate).abs() < 0.0001);
-    assert_eq!(run.active_pose("Agnes"), pose);
-    assert!(
-        run.animations.frame(pose).unwrap() >= frame,
-        "tempo change keeps phase"
-    );
-    // Reverse retreat uses the same positive multiplier and reversed frames.
-    run.input.apply(InputEvent::TouchMoved {
-        id: 1,
-        x: 60.0,
-        y: 510.0,
-    });
-    run.step(DT);
-    assert_eq!(run.clip("Agnes"), "back_right");
-    assert!((run.playback_speed("Agnes") - actual_rate).abs() < 0.0001);
-    run.key(Key::Space, true);
-    run.step(DT);
-    assert_eq!(run.clip("Agnes"), "attack_right");
-    assert_eq!(
-        run.playback_speed("Agnes"),
-        1.0,
-        "attack retains its timing"
-    );
-    run.key(Key::Space, false);
-    run.input.apply(InputEvent::TouchEnded { id: 1 });
-    run.frames(40);
-    assert_eq!(run.clip("Agnes"), "idle_right");
-    assert_eq!(run.playback_speed("Agnes"), 1.0);
-}
-
-#[test]
-fn configured_velocity_scales_cadence_for_both_fighters() {
-    let mut run = Run::with_speed(10.0);
-    run.key(Key::A, true);
-    run.key(Key::L, true);
-    run.frames(6);
-    for name in ["Agnes", "Dad"] {
-        assert!((run.playback_speed(name) - 2.0).abs() < 0.0001);
-    }
-    let mut stopped = Run::with_speed(0.0);
-    stopped.key(Key::D, true);
-    stopped.key(Key::J, true);
-    stopped.step(DT);
-    assert_eq!(stopped.clip("Agnes"), "idle_right");
-    assert_eq!(stopped.clip("Dad"), "idle_left");
-}
-
-#[test]
-fn clipped_steps_slow_the_cycle_and_blocked_input_returns_to_idle() {
-    let mut run = Run::new();
-    run.set_x("Agnes", 8.58);
-    run.set_x("Dad", -8.6);
-    run.frames(8);
     run.key(Key::D, true);
-    run.key(Key::J, true);
-    let before = run.x("Agnes");
-    run.step(DT);
-    let actual_rate = f64::from((run.x("Agnes") - before) / (DT * 5.0));
-    assert!(actual_rate > 0.0 && actual_rate < 0.3);
-    assert!((run.playback_speed("Agnes") - actual_rate).abs() < 0.0001);
-    assert_eq!(
-        run.clip("Dad"),
-        "idle_right",
-        "blocked from the first frame"
+    run.frames(120);
+    assert!(
+        run.x("Dad") - run.x("Agnes") >= 0.67,
+        "grounded bodies cannot pass through each other"
     );
-    run.step(DT);
-    assert_eq!(
-        run.clip("Agnes"),
-        "idle_left",
-        "no walking against boundary"
+}
+
+#[test]
+fn jab_has_startup_range_and_hits_once_per_press() {
+    let mut run = Run::combat(false);
+    run.close();
+    run.tap(Key::Space);
+    run.frames(4);
+    assert_eq!(run.balance("Dad"), 100.0);
+    run.frames(10);
+    assert_eq!(run.balance("Dad"), 88.0);
+    run.frames(60);
+    assert_eq!(run.balance("Dad"), 88.0);
+    let mut miss = Run::combat(false);
+    miss.tap(Key::Space);
+    miss.frames(35);
+    assert_eq!(miss.balance("Dad"), 100.0);
+}
+
+#[test]
+fn jumping_evades_sweep_but_aerial_attack_can_connect() {
+    let mut run = Run::combat(false);
+    run.close();
+    run.tap(Key::H);
+    run.tap(Key::W);
+    run.frames(24);
+    assert_eq!(run.balance("Agnes"), 100.0, "jump must clear low sweep");
+    assert!(run.height("Agnes Head") > 1.55);
+    run.frames(50);
+    assert!(run.height("Agnes Head") < 1.4, "gravity returns to floor");
+    run.close();
+    run.tap(Key::W);
+    run.frames(8);
+    run.tap(Key::Space);
+    run.frames(12);
+    assert_eq!(run.balance("Dad"), 82.0, "airborne jab becomes a kick");
+}
+
+#[test]
+fn high_guard_blocks_jab_but_sweep_requires_low_guard() {
+    let mut run = Run::combat(false);
+    run.close();
+    run.key(Key::N, true);
+    run.frames(8);
+    run.tap(Key::Space);
+    run.frames(20);
+    assert_eq!(run.balance("Dad"), 100.0);
+    assert!(run.energy("Dad") < 90.0);
+    run.frames(30);
+    run.close();
+    run.tap(Key::E);
+    run.frames(30);
+    assert_eq!(run.balance("Dad"), 74.0);
+    let mut low = Run::combat(false);
+    low.close();
+    low.key(Key::N, true);
+    low.key(Key::M, true);
+    low.frames(8);
+    low.tap(Key::E);
+    low.frames(30);
+    assert_eq!(low.balance("Dad"), 100.0);
+    assert!(low.energy("Dad") < 70.0);
+}
+
+#[test]
+fn timed_guard_parries_instead_of_dealing_damage() {
+    let mut run = Run::combat(false);
+    run.close();
+    run.tap(Key::Space);
+    run.frames(4);
+    run.key(Key::N, true);
+    run.frames(10);
+    assert_eq!(run.balance("Dad"), 100.0);
+    assert_eq!(run.text("Fight Feedback"), "PARRY!");
+    assert!(
+        !run.world.is_active(run.entity("Agnes Zone")),
+        "parry interrupts attacker"
     );
-    assert_eq!(run.playback_speed("Agnes"), 1.0);
+}
+
+#[test]
+fn dodge_crosses_body_and_has_a_punishable_end() {
+    let mut run = Run::combat(false);
+    run.close();
+    run.key(Key::D, true);
+    run.tap(Key::K);
+    run.frames(12);
+    assert!(run.x("Agnes") > run.x("Dad"));
+    assert!(run.energy("Agnes") < 85.0);
     run.key(Key::D, false);
-    run.key(Key::A, true);
-    run.step(DT);
-    assert_eq!(run.clip("Agnes"), "move_left");
-    assert!((run.playback_speed("Agnes") - 1.0).abs() < 0.0001);
+    run.frames(25);
+    assert!(run.energy("Agnes") > 78.0);
 }
 
 #[test]
-fn dad_uses_256_sheets_and_mirrors_only_the_left_attack_pose() {
-    let run = Run::new();
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    for (_, data) in run.world.entities() {
-        if !data.components.contains_key("sindri.animation.sprite")
-            || !data
-                .name
-                .as_deref()
-                .is_some_and(|name| name.starts_with("Dad "))
-        {
-            continue;
-        }
-        let sprite = &data.components["sindri.sprite"]["texture"];
-        let reference = sprite.as_str().unwrap();
-        let texture = reference.split('#').next().unwrap();
-        assert!(texture.ends_with("_256.png"), "{reference}");
-        let bytes = std::fs::read(root.join(texture)).unwrap();
-        let width = u32::from_be_bytes(bytes[16..20].try_into().unwrap());
-        let height = u32::from_be_bytes(bytes[20..24].try_into().unwrap());
-        assert_eq!([width, height], [540, 768], "180x256 frames in a 3x3 grid");
-        let sheet: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(root.join(texture.replace(".png", ".sheet"))).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(sheet["anchor"], "bottom");
-        assert_eq!(sheet["grid"]["names"].as_array().unwrap().len(), 9);
-        let clips = data.components["sindri.animation.sprite"]["clips"]
-            .as_object()
-            .unwrap();
-        for clip in clips.values() {
-            for frame in clip["frames"].as_array().unwrap() {
-                assert!(sheet["grid"]["names"].as_array().unwrap().contains(frame));
-            }
-        }
-    }
-    let left = run.world.get(run.entity("Dad Attack Left")).unwrap();
-    let right = run.world.get(run.entity("Dad Attack Right")).unwrap();
-    assert_eq!(
-        left.components["sindri.sprite"]["texture"],
-        right.components["sindri.sprite"]["texture"]
-    );
-    assert_eq!(left.transform_3d.unwrap().scale, [-1.0, 1.0, 1.0]);
-    assert_eq!(right.transform_3d.unwrap().scale, [1.0, 1.0, 1.0]);
-    assert_eq!(
-        left.components["sindri.animation.sprite"]["clips"]["attack_left"]["frames"],
-        right.components["sindri.animation.sprite"]["clips"]["attack_right"]["frames"]
-    );
-}
-
-#[test]
-fn punches_have_windup_range_and_only_one_hit_per_swing() {
+fn whiff_recovery_rewards_a_counter_hit() {
     let mut run = Run::combat(false);
     run.set_x("Agnes", 0.0);
+    run.set_x("Dad", 2.0);
+    run.tap(Key::E);
+    run.frames(26);
     run.set_x("Dad", 1.0);
-    run.key(Key::Space, true);
-    run.frames(6);
-    assert_eq!(run.balance("Dad"), 100.0, "windup cannot hit");
-    run.frames(30);
-    run.key(Key::Space, false);
-    run.frames(3);
-    assert_eq!(run.balance("Dad"), 75.0, "one swing hits once");
-    run.frames(40);
-    assert_eq!(run.balance("Dad"), 75.0, "no passive balance damage");
-
-    let mut miss = Run::combat(false);
-    miss.key(Key::Space, true);
-    miss.frames(45);
-    assert_eq!(miss.balance("Dad"), 100.0, "out of reach must miss");
-}
-
-#[test]
-fn a_timed_dodge_avoids_dads_punch_and_has_a_cooldown() {
-    let mut run = Run::combat(false);
-    run.set_x("Agnes", 0.3);
-    run.set_x("Dad", 0.5);
-    run.key(Key::I, true);
-    run.frames(14);
-    run.key(Key::I, false);
-    run.key(Key::K, true);
-    run.step(DT);
-    run.key(Key::K, false);
-    run.frames(14);
+    run.tap(Key::I);
+    run.frames(15);
     assert_eq!(
         run.balance("Agnes"),
-        100.0,
-        "dodge protects during active punch"
+        85.0,
+        "12 damage plus 25 percent punish bonus"
     );
-    assert_eq!(run.text("Dodge Label"), "WAIT");
-    let x = run.x("Agnes");
-    run.key(Key::K, true);
-    run.frames(2);
-    run.key(Key::K, false);
-    assert!(
-        (run.x("Agnes") - x).abs() < 0.01,
-        "cooldown blocks another dodge"
-    );
-    run.frames(60);
-    assert_eq!(run.text("Dodge Label"), "DODGE");
+    assert_eq!(run.text("Fight Feedback"), "PUNISH!");
 }
 
 #[test]
-fn ai_closes_distance_telegraphs_and_can_land_a_punch() {
+fn stamina_regenerates_and_held_attack_does_not_repeat() {
+    let mut run = Run::combat(false);
+    run.close();
+    run.key(Key::E, true);
+    run.frames(55);
+    assert_eq!(run.balance("Dad"), 74.0);
+    assert!(run.energy("Agnes") < 100.0);
+    run.key(Key::E, false);
+    run.frames(150);
+    assert_eq!(run.energy("Agnes"), 100.0);
+}
+
+#[test]
+fn ai_approaches_and_uses_combat_without_player_input() {
     let mut run = Run::combat(true);
-    let x = run.x("Dad");
-    run.frames(10);
-    assert!(run.x("Dad") < x, "AI approaches Agnes");
-    run.frames(180);
-    assert!(run.balance("Agnes") < 100.0, "AI must actually attack");
+    let start = run.x("Dad");
+    run.frames(300);
+    assert!(run.x("Dad") < start);
+    assert!(run.balance("Agnes") < 100.0);
 }
 
 #[test]
-fn three_tumbles_finish_the_match_and_rematch_resets_everything() {
+fn round_timeout_and_rematch_reset_health_energy_and_positions() {
     let mut run = Run::combat(false);
-    for round in 0..3 {
-        for _ in 0..4 {
-            run.set_x("Agnes", 0.0);
-            run.set_x("Dad", 1.0);
-            run.key(Key::Space, true);
-            run.step(DT);
-            run.key(Key::Space, false);
-            run.frames(45);
-        }
-        if round < 2 {
-            run.frames(120);
-        }
-    }
-    assert!(run.text("Bout Score").starts_with("3  :  0"));
-    assert!(run.text("Bout Notice").contains("Agnes wins"));
-    run.key(Key::R, true);
-    run.step(DT);
-    run.key(Key::R, false);
-    run.frames(80);
-    assert_eq!(run.balance("Agnes"), 100.0);
+    run.close();
+    run.tap(Key::Space);
+    run.frames(25);
+    run.frames(2700);
+    assert!(run.text("Bout Score").starts_with("1"));
+    run.tap(Key::R);
+    run.frames(3);
     assert_eq!(run.balance("Dad"), 100.0);
+    assert_eq!(run.energy("Agnes"), 100.0);
     assert!(run.text("Bout Score").starts_with("0  :  0"));
-    assert_eq!(run.text("Bout Notice"), "");
 }
 
 #[test]
-fn combat_punches_commit_to_their_side_and_cannot_hit_another_ground_line() {
+fn portrait_buttons_fit_and_touch_jump_jab_guard_dodge_work() {
     let mut run = Run::combat(false);
-    run.set_x("Agnes", 0.0);
-    run.set_x("Dad", 1.0);
-    run.key(Key::Space, true);
-    run.step(DT);
-    run.key(Key::Space, false);
-    run.set_x("Dad", -0.5);
+    for name in [
+        "Dodge Button",
+        "Attack Button",
+        "Heavy Button",
+        "Jump Button",
+        "Guard Button",
+    ] {
+        let r = run.screen.rect(run.entity(name)).unwrap();
+        assert!(r.center[0].abs() + r.size[0] * 0.5 <= 360.0 / 640.0);
+        assert!(r.center[1].abs() + r.size[1] * 0.5 <= 1.0);
+    }
+    run.touch("Jump Button", true);
+    run.touch("Jump Button", false);
+    run.frames(8);
+    assert!(run.height("Agnes Head") > 1.55);
+    run.frames(60);
+    run.close();
+    run.touch("Attack Button", true);
+    run.touch("Attack Button", false);
     run.frames(20);
-    assert_eq!(run.clip("Agnes"), "attack_right", "punch stays committed");
-    assert_eq!(run.balance("Dad"), 100.0, "no hit behind the attacker");
+    assert_eq!(run.balance("Dad"), 88.0);
+    run.frames(25);
+    run.touch("Guard Button", true);
+    run.frames(10);
+    assert!(run.world.is_active(run.entity("Agnes Guard")));
+    run.touch("Guard Button", false);
+    run.frames(2);
+    assert!(!run.world.is_active(run.entity("Agnes Guard")));
+    let before = run.x("Agnes");
+    run.touch("Dodge Button", true);
+    run.touch("Dodge Button", false);
+    run.frames(8);
+    assert!(run.x("Agnes") < before);
+}
 
-    let mut separate = Run::combat(false);
-    separate.set_x("Agnes", 0.0);
-    separate.set_x("Dad", 1.0);
-    let dad = separate.entity("Dad");
-    separate
-        .world
-        .get_mut(dad)
-        .unwrap()
-        .transform_3d
-        .as_mut()
-        .unwrap()
-        .position[1] += 0.5;
-    separate.key(Key::Space, true);
-    separate.frames(30);
+#[test]
+fn training_disables_ai_and_touch_stick_moves_only_player() {
+    let mut run = Run::combat(true);
+    run.tap(Key::P);
+    run.frames(5);
+    let dad = run.x("Dad");
+    let agnes = run.x("Agnes");
+    run.input.apply(InputEvent::TouchStarted {
+        id: 1,
+        x: 125.0,
+        y: 535.0,
+    });
+    run.step(DT);
+    run.input.apply(InputEvent::TouchMoved {
+        id: 1,
+        x: 75.0,
+        y: 535.0,
+    });
+    run.frames(15);
+    assert!(run.x("Agnes") < agnes);
+    assert_eq!(run.x("Dad"), dad);
+}
+
+#[test]
+fn guard_break_takes_damage_and_confirmed_jab_can_chain_into_sweep() {
+    let mut guard = Run::combat(false);
+    guard.close();
+    guard.key(Key::N, true);
+    guard.key(Key::M, true);
+    guard.frames(8);
+    for _ in 0..3 {
+        guard.close();
+        guard.tap(Key::E);
+        guard.frames(60);
+    }
+    assert_eq!(guard.balance("Dad"), 74.0, "third sweep exhausts low guard");
+    let mut combo = Run::combat(false);
+    combo.close();
+    combo.tap(Key::Space);
+    combo.frames(11);
+    combo.tap(Key::E);
+    combo.frames(45);
     assert_eq!(
-        separate.balance("Dad"),
-        100.0,
-        "another ground line is out of range"
+        combo.balance("Dad"),
+        62.0,
+        "confirmed jab earns a sweep cancel"
     );
 }
 
 #[test]
-fn accepted_hits_briefly_pause_both_fighters_then_restore_animation() {
+fn match_finishes_at_three_and_rematch_clears_the_winner() {
     let mut run = Run::combat(false);
-    run.set_x("Agnes", 0.0);
-    run.set_x("Dad", 1.0);
-    run.key(Key::Space, true);
-    run.frames(12);
-    assert_eq!(run.playback_speed("Agnes"), 0.0);
-    assert_eq!(run.playback_speed("Dad"), 0.0);
-    run.key(Key::Space, false);
-    run.frames(5);
-    assert!(run.playback_speed("Agnes") > 0.0);
-    assert_eq!(run.balance("Dad"), 75.0);
+    for _ in 0..3 {
+        for _ in 0..9 {
+            run.close();
+            run.tap(Key::Space);
+            run.frames(32);
+        }
+        run.frames(120);
+    }
+    assert!(run.text("Bout Score").starts_with("3"));
+    assert!(run.text("Bout Notice").contains("Agnes wins"));
+    let before = run.x("Agnes");
+    run.key(Key::D, true);
+    run.frames(30);
+    assert_eq!(run.x("Agnes"), before, "winner freezes combat");
+    run.key(Key::D, false);
+    run.tap(Key::R);
+    run.frames(3);
+    assert!(run.text("Bout Score").starts_with("0  :  0"));
+    assert_eq!(run.balance("Dad"), 100.0);
 }
 
 #[test]
-fn portrait_touch_buttons_fit_and_trigger_dodge_and_attack() {
-    let mut run = Run::combat(false);
-    for name in ["Dodge Button", "Attack Button"] {
-        let rect = run.screen.rect(run.entity(name)).unwrap();
-        assert!(rect.center[0].abs() + rect.size[0] * 0.5 <= 360.0 / 640.0);
-        assert!(rect.center[1].abs() + rect.size[1] * 0.5 <= 1.0);
+fn dodge_invulnerability_expires_before_the_dash_finishes() {
+    let mut early = Run::combat(false);
+    early.close();
+    early.tap(Key::I);
+    early.frames(3);
+    early.tap(Key::K);
+    for _ in 0..8 {
+        early.set_x("Agnes", 0.0);
+        early.set_x("Dad", 1.0);
+        early.step(DT);
     }
-    let tap = |run: &mut Run, name: &str| {
-        let rect = run.screen.rect(run.entity(name)).unwrap();
-        run.input.apply(InputEvent::TouchStarted {
-            id: 2,
-            x: 180.0 + rect.center[0] * 320.0,
-            y: 320.0 - rect.center[1] * 320.0,
-        });
-        run.step(DT);
-        run.input.apply(InputEvent::TouchEnded { id: 2 });
-        run.step(DT);
-    };
-    let before = run.x("Agnes");
-    tap(&mut run, "Dodge Button");
-    assert!(run.x("Agnes") < before, "touch dodge retreats");
-    assert_eq!(run.text("Dodge Label"), "WAIT");
-    run.frames(20);
-    run.set_x("Agnes", 0.0);
-    run.set_x("Dad", 1.0);
-    tap(&mut run, "Attack Button");
-    assert_eq!(run.clip("Agnes"), "attack_right");
-    run.frames(30);
-    assert_eq!(
-        run.balance("Dad"),
-        75.0,
-        "touch attack deals balance damage"
+    assert_eq!(early.balance("Agnes"), 100.0);
+    let mut late = Run::combat(false);
+    late.close();
+    late.tap(Key::K);
+    late.frames(8);
+    late.set_x("Agnes", 0.0);
+    late.set_x("Dad", 1.0);
+    late.tap(Key::I);
+    for _ in 0..12 {
+        late.set_x("Agnes", 0.0);
+        late.set_x("Dad", 1.0);
+        late.step(DT);
+    }
+    assert_eq!(late.balance("Agnes"), 88.0, "dash end can be hit");
+}
+
+#[test]
+fn multitouch_down_stick_plus_guard_selects_low_guard() {
+    let mut run = Run::combat(false);
+    run.input.apply(InputEvent::TouchStarted {
+        id: 1,
+        x: 125.0,
+        y: 535.0,
+    });
+    run.step(DT);
+    run.input.apply(InputEvent::TouchMoved {
+        id: 1,
+        x: 125.0,
+        y: 595.0,
+    });
+    run.step(DT);
+    run.touch("Guard Button", true);
+    run.frames(4);
+    assert!(run.world.is_active(run.entity("Agnes Guard")));
+    assert!(
+        run.height("Agnes Head") < 0.9,
+        "downward touch crouches while second finger guards"
     );
 }

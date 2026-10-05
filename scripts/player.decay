@@ -1,332 +1,360 @@
+// Combat rules use seconds and world units, independent of artwork.
 script Player {
-    @export let speed: f32 = 5.0;
-    @export let walk_reference_speed: f32 = 5.0;
-    @export let attack_effect_frame: f32 = 3.0;
+    @export let speed: f32 = 4.2;
     @export let fighter_name: String = "Agnes";
     @export let opponent_name: String = "Dad";
     @export let primary_controls: bool = true;
-    @export let starts_facing_right: bool = true;
-    @export let combat_enabled: bool = true;
     @export let ai_enabled: bool = false;
     @export let sound_enabled: bool = true;
-    @export let attack_reach: f32 = 1.15;
-    @export let attack_damage: f32 = 25.0;
-    @export let attack_rate: f32 = 1.35;
-    @export let hit_push: f32 = 3.5;
+    @export let body_height: f32 = 1.55;
+    @export let jab_reach: f32 = 1.25;
     var balance: f32 = 100.0;
-    var dodge_cooldown: f32 = 0.0;
+    var stamina: f32 = 100.0;
+    var regen_wait: f32 = 0.0;
+    var state: f32 = 0.0; // 0 neutral, 1 attack, 2 dodge, 3 hurt
+    var direction: f32 = 1.0;
+    var attack_kind: f32 = 0.0; // 1 jab, 2 sweep, 3 aerial kick
+    var attack_elapsed: f32 = 0.0;
+    var startup: f32 = 0.0;
+    var duration: f32 = 0.0;
+    var reach: f32 = 0.0;
+    var damage: f32 = 0.0;
+    var attack_hit: bool = false;
+    var connected: bool = false;
+    var buffer: f32 = 0.0;
+    var buffer_time: f32 = 0.0;
     var dodge_time: f32 = 0.0;
     var dodge_direction: f32 = 0.0;
+    var dodge_cooldown: f32 = 0.0;
     var hurt_time: f32 = 0.0;
     var hit_pause: f32 = 0.0;
     var knock_speed: f32 = 0.0;
-    var attack_elapsed: f32 = 0.0;
-    var attack_hit: bool = false;
-    var ai_wait: f32 = 0.65;
-    var ai_attacks: f32 = 0.0;
-    var seen_round: f32 = 0.0;
-    var paused_animation: bool = false;
-    var facing_right: bool = true;
-    var draw_layer: f32 = -1.0;
+    var guarding: bool = false;
+    var guard_age: f32 = 0.0;
+    var crouching: bool = false;
+    var jump_height: f32 = 0.0;
+    var jump_velocity: f32 = 0.0;
+    var air_attacked: bool = false;
+    var seen_round: f32 = -1.0;
+    var feedback: String = "";
+    var feedback_time: f32 = 0.0;
+    var ai_clock: f32 = 0.0;
+    var ai_choice: f32 = 0.0;
+    var ai_move: f32 = 0.0;
+    var ai_guard: bool = false;
+    var ai_crouch: bool = false;
+    var pad_jab: bool = false;
+    var pad_heavy: bool = false;
+    var pad_jump: bool = false;
+    var pad_dodge: bool = false;
+    var last_jab: bool = false;
+    var last_heavy: bool = false;
+    var last_jump: bool = false;
+    var last_dodge: bool = false;
     var opponent: Entity = null;
-    var walking_backwards: bool = false;
-    var state: f32 = 0.0;
-    var shown: Entity = null;
-    var shown_shadow: String = "";
-    var idle_left: Entity = null;
-    var idle_right: Entity = null;
-    var move_left: Entity = null;
-    var move_right: Entity = null;
-    var turn: Entity = null;
-    var attack_left: Entity = null;
-    var attack_right: Entity = null;
-    var attack_button: Entity = null;
-    var step_dust: Entity = null;
-    var attack_sparks: Entity = null;
-    var step_cooldown: f32 = 0.0;
-    var attack_sparked: bool = false;
+    var body: Entity = null;
+    var head: Entity = null;
+    var hand: Entity = null;
+    var zone: Entity = null;
+    var shield: Entity = null;
+    var shadow: Entity = null;
 
     fn start() {
-        this.facing_right = this.starts_facing_right;
         this.opponent = World.find(this.opponent_name);
-        update_facing();
-        this.idle_left = World.find(this.fighter_name + " Idle Left");
-        this.idle_right = World.find(this.fighter_name + " Idle Right");
-        this.move_left = World.find(this.fighter_name + " Move Left");
-        this.move_right = World.find(this.fighter_name + " Move Right");
-        this.turn = World.find(this.fighter_name + " Turn");
-        this.attack_left = World.find(this.fighter_name + " Attack Left");
-        this.attack_right = World.find(this.fighter_name + " Attack Right");
-        this.attack_button = World.find("Attack Button");
-        this.step_dust = World.find("Step Dust");
-        this.attack_sparks = World.find("Attack Sparks");
-        update_layering();
-        to_idle();
+        this.body = World.find(this.fighter_name + " Body");
+        this.head = World.find(this.fighter_name + " Head");
+        this.hand = World.find(this.fighter_name + " Hand");
+        this.zone = World.find(this.fighter_name + " Zone");
+        this.shield = World.find(this.fighter_name + " Guard");
+        this.shadow = World.find(this.fighter_name + " Shadow");
+        reset_round();
+        draw();
     }
 
     fn update(dt: f32) {
-        if this.combat_enabled && this.seen_round != Game.round { reset_round(); }
-        update_layering();
-        this.step_cooldown = max(0.0, this.step_cooldown - dt);
+        if this.seen_round != Game.round { reset_round(); }
+        if this.primary_controls { read_pads(); }
+        this.feedback_time = max(0.0, this.feedback_time - dt);
         this.dodge_cooldown = max(0.0, this.dodge_cooldown - dt);
-        this.hurt_time = max(0.0, this.hurt_time - dt);
-        this.hit_pause = max(0.0, this.hit_pause - dt);
-        if this.shown != null {
-            this.shown.sprite.color_offset = Color(0.0, 0.0, 0.0, 0.0);
-            this.shown.sprite.tint = Color(1.0, 1.0, 1.0, 1.0);
-            if this.hurt_time > 0.0 { this.shown.sprite.color_offset = Color(0.6, 0.3, 0.3, 0.0); }
-            if this.dodge_time > 0.0 { this.shown.sprite.tint = Color(0.65, 0.85, 1.0, 0.72); }
+        this.buffer_time = max(0.0, this.buffer_time - dt);
+        if this.buffer_time <= 0.0 { this.buffer = 0.0; }
+        if !Game.practice && Game.phase != 0.0 { draw(); return; }
+        // Attack input remains buffered through impact freeze.
+        if !this.ai_enabled || Game.practice {
+            var jab_key = Input.just_pressed("I");
+            var heavy_key = Input.just_pressed("H");
+            if this.primary_controls {
+                jab_key = Input.just_pressed("Space") || this.pad_jab;
+                heavy_key = Input.just_pressed("E") || this.pad_heavy;
+            }
+            if jab_key { this.buffer = 1.0; this.buffer_time = 0.12; }
+            if heavy_key { this.buffer = 2.0; this.buffer_time = 0.12; }
         }
-        if this.combat_enabled && !Game.practice && Game.phase != 0.0 {
-            if this.state != 0.0 { to_idle(); }
-            return;
+        if this.hit_pause > 0.0 { this.hit_pause = max(0.0, this.hit_pause - dt); draw(); return; }
+        this.regen_wait = max(0.0, this.regen_wait - dt);
+        if this.regen_wait <= 0.0 && this.state == 0.0 && !this.guarding {
+            this.stamina = min(100.0, this.stamina + 26.0 * dt);
         }
-        if this.combat_enabled && this.hit_pause > 0.0 {
-            pose_speed(0.0);
-            this.paused_animation = true;
-            return;
-        }
-        if this.paused_animation {
-            pose_speed(1.0);
-            if this.state == 5.0 { pose_speed(this.attack_rate); }
-            this.paused_animation = false;
+        if this.jump_height > 0.0 || this.jump_velocity > 0.0 {
+            this.jump_velocity -= 18.0 * dt;
+            this.jump_height = max(0.0, this.jump_height + this.jump_velocity * dt);
+            if this.jump_height <= 0.0 { this.jump_velocity = 0.0; this.air_attacked = false; }
         }
         var move_x = Input.axis("J", "L");
-        var attack = Input.just_pressed("I");
+        var jab = Input.just_pressed("I");
+        var heavy = Input.just_pressed("H");
         var dodge = Input.just_pressed("O");
+        var jump = Input.just_pressed("Y");
+        var guard = Input.is_down("N");
+        var crouch = Input.is_down("M");
         if this.primary_controls {
             move_x = Input.axis("A", "D") + Input.axis("ArrowLeft", "ArrowRight");
             if Stick.held && abs(Stick.x) > abs(move_x) { move_x = Stick.x; }
-            attack = Input.just_pressed("Space") || Ui.is_pressed(this.attack_button);
-            dodge = Input.just_pressed("K") || Ui.is_pressed(World.find("Dodge Button"));
+            jab = Input.just_pressed("Space") || this.pad_jab;
+            heavy = Input.just_pressed("E") || this.pad_heavy;
+            dodge = Input.just_pressed("K") || this.pad_dodge;
+            jump = Input.just_pressed("W") || Input.just_pressed("ArrowUp") || this.pad_jump;
+            guard = Input.is_down("ShiftLeft") || Ui.is_held(World.find("Guard Button"));
+            crouch = Input.is_down("S") || Input.is_down("ArrowDown") || (Stick.held && Stick.y > 0.35);
         }
-        if this.ai_enabled && this.combat_enabled && !Game.practice {
-            move_x = 0.0;
-            attack = false;
-            dodge = false;
-            this.ai_wait = max(0.0, this.ai_wait - dt);
-            let gap = this.opponent.transform.position.x - this.transform.position.x;
-            let distance = abs(gap);
-            // Commit to a punch rather than tracking a dodge during its windup.
-            if this.state != 5.0 && this.hurt_time <= 0.0 {
-                if distance > this.attack_reach - 0.25 { move_x = sign(gap) * 0.68; }
-                else if distance < 0.8 { move_x = -sign(gap) * 0.45; }
-                if distance <= this.attack_reach && this.ai_wait <= 0.0 {
-                    attack = true;
-                    move_x = 0.0;
-                    this.ai_attacks += 1.0;
-                    // A deterministic hesitation every third attempt creates openings.
-                    this.ai_wait = 0.9;
-                    if this.ai_attacks >= 3.0 { this.ai_wait = 1.35; this.ai_attacks = 0.0; }
+        if this.ai_enabled && !Game.practice {
+            this.ai_clock -= dt;
+            jab = false; heavy = false; dodge = false; jump = false;
+            if this.ai_clock <= 0.0 {
+                // Only observe live combat state, at a human-sized reaction interval.
+                this.ai_clock = 0.22;
+                this.ai_choice += 1.0;
+                if this.ai_choice > 7.0 { this.ai_choice = 1.0; }
+                let gap = this.opponent.transform.position.x - this.transform.position.x;
+                let distance = abs(gap);
+                this.ai_move = 0.0; this.ai_guard = false; this.ai_crouch = false;
+                if this.state == 0.0 {
+                    let enemy = Player.on(this.opponent);
+                    if enemy.state == 1.0 && enemy.attack_elapsed < enemy.startup && distance <= enemy.reach + 0.35 {
+                        if enemy.attack_kind == 2.0 && this.stamina >= 10.0 { jump = true; }
+                        else if this.ai_choice == 3.0 && this.stamina >= 22.0 { dodge = true; this.ai_move = -sign(gap); }
+                        else { this.ai_guard = true; }
+                    } else if this.stamina < 25.0 {
+                        this.ai_move = -sign(gap) * 0.65;
+                    } else if distance > this.jab_reach + 0.05 {
+                        this.ai_move = sign(gap) * 0.72;
+                    } else if enemy.state == 1.0 && enemy.attack_elapsed > enemy.startup + 0.10 {
+                        jab = true;
+                    } else if this.ai_choice == 2.0 || this.ai_choice == 6.0 {
+                        this.ai_move = -sign(gap) * 0.55;
+                    } else if this.ai_choice == 4.0 {
+                        heavy = true;
+                    } else if this.ai_choice == 5.0 {
+                        this.ai_guard = true;
+                    } else { jab = true; }
                 }
             }
+            move_x = this.ai_move;
+            guard = this.ai_guard;
+            crouch = this.ai_crouch;
+            if this.jump_height > 0.3 && !this.air_attacked && abs(this.opponent.transform.position.x - this.transform.position.x) < 1.65 { jab = true; }
         }
-        move_x = max(-1.0, min(1.0, move_x));
-        if this.combat_enabled && this.hurt_time > 0.0 {
-            this.transform.position.x = clamp(this.transform.position.x + this.knock_speed * dt, -arena_limit(), arena_limit());
-            this.knock_speed *= max(0.0, 1.0 - 10.0 * dt);
-            if this.state != 0.0 { to_idle(); }
-            return;
+        move_x = clamp(move_x, -1.0, 1.0);
+        if jab { this.buffer = 1.0; this.buffer_time = 0.12; }
+        if heavy { this.buffer = 2.0; this.buffer_time = 0.12; }
+        if this.state == 3.0 {
+            this.hurt_time = max(0.0, this.hurt_time - dt);
+            move(this.knock_speed * dt, true);
+            this.knock_speed *= max(0.0, 1.0 - 9.0 * dt);
+            if this.hurt_time <= 0.0 { this.state = 0.0; }
+            draw(); return;
         }
-        if this.combat_enabled && dodge && this.dodge_cooldown <= 0.0 && this.state != 5.0 {
-            this.dodge_time = 0.22;
-            this.dodge_cooldown = 0.85;
-            this.dodge_direction = sign(move_x);
-            if abs(move_x) < 0.05 {
-                this.dodge_direction = 1.0;
-                if this.facing_right { this.dodge_direction = -1.0; }
-            }
-            to_idle();
-        }
-        if this.dodge_time > 0.0 {
-            this.transform.position.x = clamp(this.transform.position.x + this.dodge_direction * 8.0 * min(dt, this.dodge_time), -arena_limit(), arena_limit());
+        if this.state == 2.0 {
+            move(this.dodge_direction * 7.8 * min(dt, this.dodge_time), true);
             this.dodge_time = max(0.0, this.dodge_time - dt);
-            update_facing();
-            return;
+            if this.dodge_time <= 0.0 { this.state = 0.0; }
+            draw(); return;
         }
-        let previous_facing = this.facing_right;
-        // An attack commits to its initial side in combat; dodging through it works.
-        if this.state != 5.0 || !this.combat_enabled || Game.practice { update_facing(); }
-        let side_changed = this.facing_right != previous_facing;
-        var moved_x = 0.0;
-        if abs(move_x) > 0.05 && ((this.state != 5.0 && !attack) || side_changed) {
-            let previous_x = this.transform.position.x;
-            this.transform.position.x += move_x * this.speed * dt;
-            var limit = 8.6;
-            if this.combat_enabled && !Game.practice { limit = arena_limit(); }
-            this.transform.position.x = clamp(this.transform.position.x, -limit, limit);
-            moved_x = this.transform.position.x - previous_x;
-            if moved_x != 0.0 && this.step_cooldown <= 0.0 {
-                Effects.burst_at(this.step_dust, this.transform.position.x, this.transform.position.y + 0.05);
-                this.step_cooldown = 0.14;
-            }
-        }
-        if side_changed {
-            this.state = 4.0;
-            if this.facing_right { show(this.turn, "left_to_right"); }
-            else { show(this.turn, "right_to_left"); }
-            return;
-        }
-        if this.state == 5.0 {
+        if this.state == 1.0 {
             this.attack_elapsed += dt;
-            if this.combat_enabled && !Game.practice {
-                let windup = this.attack_effect_frame * 0.07 / this.attack_rate;
-                if !this.attack_hit && this.attack_elapsed >= windup && this.attack_elapsed < windup + 0.08 {
-                    try_hit();
-                }
-            } else if !this.attack_sparked && Animation.frame(this.shown) >= this.attack_effect_frame {
-                Effects.burst_at(this.attack_sparks, this.transform.position.x, this.transform.position.y + 1.0);
-                this.attack_sparked = true;
-            }
-            if Animation.is_finished(this.shown) { to_idle(); }
-            return;
+            if !this.attack_hit && this.attack_elapsed >= this.startup && this.attack_elapsed < this.startup + 0.10 { try_hit(); }
+            // One earned jab -> sweep cancel, only after an accepted hit.
+            if this.attack_kind == 1.0 && this.connected && this.attack_elapsed >= this.startup + 0.10 && this.buffer == 2.0 {
+                this.state = 0.0; begin_attack(2.0);
+            } else if this.attack_elapsed >= this.duration { this.state = 0.0; }
+            draw(); return;
         }
-        if attack {
-            this.state = 5.0;
-            this.attack_elapsed = 0.0;
-            this.attack_hit = false;
-            this.attack_sparked = false;
-            if this.facing_right { show(this.attack_right, "attack_right"); }
-            else { show(this.attack_left, "attack_left"); }
-            if this.combat_enabled && !Game.practice { pose_speed(this.attack_rate); }
-            return;
+        let gap = this.opponent.transform.position.x - this.transform.position.x;
+        if abs(gap) > 0.02 { this.direction = sign(gap); }
+        this.crouching = crouch && this.jump_height <= 0.0;
+        let was_guarding = this.guarding;
+        this.guarding = guard && this.stamina > 0.0 && this.jump_height <= 0.0;
+        if this.guarding {
+            if !was_guarding { this.guard_age = 0.0; }
+            this.guard_age += dt;
+            this.stamina = max(0.0, this.stamina - 8.0 * dt);
+            this.regen_wait = 0.35;
+        } else { this.guard_age = 0.0; }
+        if jump && this.jump_height <= 0.0 && this.stamina >= 10.0 {
+            spend(10.0); this.jump_velocity = 7.0; this.guarding = false; this.crouching = false;
         }
-        if this.state == 4.0 && !Animation.is_finished(this.shown) { return; }
-        if abs(moved_x) > 0.0 && dt > 0.0 {
-            begin_loop(moved_x);
-            pose_speed(abs(moved_x) / (dt * max(0.001, this.walk_reference_speed)));
-        } else if this.state != 0.0 { to_idle(); }
+        if dodge && this.jump_height <= 0.0 && this.jump_velocity <= 0.0 && this.dodge_cooldown <= 0.0 && this.stamina >= 22.0 {
+            spend(22.0); this.state = 2.0; this.dodge_time = 0.28; this.dodge_cooldown = 0.65;
+            this.dodge_direction = sign(move_x);
+            if abs(move_x) < 0.05 { this.dodge_direction = -this.direction; }
+            this.guarding = false; this.crouching = false;
+        } else if this.buffer > 0.0 && !this.guarding { begin_attack(this.buffer); }
+        else {
+            var rate = 1.0;
+            if this.guarding || this.crouching { rate = 0.38; }
+            move(move_x * this.speed * rate * dt, this.jump_height > 0.5);
+        }
+        draw();
     }
 
-    fn arena_limit() -> f32 {
-        // Fit the full fighter within portrait screens as well as desktops.
-        return max(0.6, min(8.6, Viewport.aspect * 6.0 - this.transform.scale.x * 0.5));
+    fn read_pads() {
+        // These shape pads use the engine's press-identity capture (slider)
+        // so a second finger works while the first owns the virtual stick.
+        let jab = Ui.is_held(World.find("Attack Button"));
+        let heavy = Ui.is_held(World.find("Heavy Button"));
+        let jump = Ui.is_held(World.find("Jump Button"));
+        let dodge = Ui.is_held(World.find("Dodge Button"));
+        this.pad_jab = jab && !this.last_jab;
+        this.pad_heavy = heavy && !this.last_heavy;
+        this.pad_jump = jump && !this.last_jump;
+        this.pad_dodge = dodge && !this.last_dodge;
+        this.last_jab = jab; this.last_heavy = heavy;
+        this.last_jump = jump; this.last_dodge = dodge;
     }
 
-    fn pose_speed(rate: f32) {
-        Animation.set_speed(this.shown, rate);
-        for i in 0..9 { Animation.set_speed(World.find(this.shown_shadow + " " + i), rate); }
+    fn spend(amount: f32) { this.stamina = max(0.0, this.stamina - amount); this.regen_wait = 0.45; }
+
+    fn begin_attack(requested: f32) {
+        var kind = requested;
+        this.buffer = 0.0; this.buffer_time = 0.0;
+        var cost = 7.0;
+        if kind == 2.0 { cost = 24.0; }
+        if this.jump_height > 0.0 || this.jump_velocity > 0.0 {
+            if this.air_attacked { return; }
+            kind = 3.0; cost = 14.0;
+        }
+        if this.stamina < cost { return; }
+        spend(cost);
+        this.state = 1.0; this.attack_kind = kind; this.attack_elapsed = 0.0;
+        this.attack_hit = false; this.connected = false;
+        this.startup = 0.12; this.duration = 0.34; this.reach = this.jab_reach; this.damage = 12.0;
+        if kind == 2.0 { this.startup = 0.32; this.duration = 0.78; this.reach = 1.70; this.damage = 26.0; }
+        if kind == 3.0 { this.startup = 0.10; this.duration = 0.42; this.reach = 1.65; this.damage = 18.0; this.air_attacked = true; }
+        this.guarding = false; this.crouching = false;
     }
 
     fn try_hit() {
         let gap = this.opponent.transform.position.x - this.transform.position.x;
-        var direction = -1.0;
-        if this.facing_right { direction = 1.0; }
-        if gap * direction < 0.0 || abs(gap) > this.attack_reach { return; }
+        let enemy = Player.on(this.opponent);
+        if gap * this.direction < 0.0 || abs(gap) > this.reach { return; }
         if abs(this.opponent.transform.position.y - this.transform.position.y) > 0.25 { return; }
-        if Player.on(this.opponent).dodge_time > 0.0 || Player.on(this.opponent).balance <= 0.0 { return; }
+        if this.attack_kind == 2.0 && enemy.jump_height > 0.35 { return; }
+        if this.attack_kind == 1.0 && abs(enemy.jump_height - this.jump_height) > 1.05 { return; }
+        if this.attack_kind == 3.0 && abs(enemy.jump_height - this.jump_height) > 1.65 { return; }
         this.attack_hit = true;
-        Player.on(this.opponent).receive_hit(this.attack_damage, direction * this.hit_push, this.entity);
+        Player.on(this.opponent).receive_hit(this.damage, this.direction, this.attack_kind, this.entity);
     }
 
-    fn receive_hit(damage: f32, push: f32, attacker: Entity) {
-        if !this.combat_enabled || Game.practice || Game.phase != 0.0 || this.dodge_time > 0.0 || this.balance <= 0.0 { return; }
+    fn receive_hit(amount: f32, direction: f32, kind: f32, attacker: Entity) {
+        var damage = amount;
+        if (!Game.practice && Game.phase != 0.0) || this.balance <= 0.0 { return; }
+        // The first 120 ms of a dodge are invulnerable; its end is punishable.
+        if this.state == 2.0 && this.dodge_time > 0.16 { return; }
+        if kind == 2.0 && this.jump_height > 0.35 { return; }
+        if this.guarding && this.direction * direction < 0.0 && ((kind == 2.0 && this.crouching) || (kind != 2.0 && !this.crouching)) {
+            if this.guard_age <= 0.085 {
+                this.stamina = min(100.0, this.stamina + 8.0);
+                Player.on(attacker).parried();
+                say("PARRY!"); return;
+            }
+            var drain = 16.0;
+            if kind == 2.0 { drain = 38.0; }
+            spend(drain);
+            if this.stamina > 0.0 {
+                this.knock_speed = direction * 1.8; this.hurt_time = 0.12; this.state = 3.0;
+                say("BLOCK"); return;
+            }
+            this.hurt_time = 0.60; say("GUARD BREAK!");
+        } else {
+            this.hurt_time = 0.18;
+            if kind == 2.0 { this.hurt_time = 0.32; }
+            if this.state == 1.0 && this.attack_elapsed >= this.startup + 0.10 {
+                damage *= 1.25; say("PUNISH!");
+            } else { say("HIT"); }
+        }
         this.balance = max(0.0, this.balance - damage);
-        Player.on(attacker).hit_pause = 0.045;
-        Effects.burst_at(this.attack_sparks, this.transform.position.x, this.transform.position.y + 1.0);
+        this.state = 3.0; this.guarding = false; this.buffer = 0.0;
+        this.knock_speed = direction * 3.2;
+        if kind == 2.0 { this.knock_speed = direction * 5.0; }
+        this.hit_pause = 0.055;
+        Player.on(attacker).confirm_hit();
         if this.sound_enabled { Audio.play("audio/hit.wav", 0.45); }
-        this.hurt_time = 0.22;
-        this.hit_pause = 0.045;
-        this.knock_speed = push;
-        to_idle();
+    }
+
+    fn confirm_hit() { this.connected = true; this.hit_pause = 0.055; }
+    fn parried() { this.state = 3.0; this.hurt_time = 0.36; this.guarding = false; this.knock_speed = 0.0; say("PARRIED"); }
+    fn say(message: String) { this.feedback = message; this.feedback_time = 0.75; }
+
+    fn arena_limit() -> f32 { return max(1.8, min(8.0, Viewport.aspect * 6.0 - 0.65)); }
+    fn move(amount: f32, pass: bool) {
+        let old = this.transform.position.x;
+        var next = clamp(old + amount, -arena_limit(), arena_limit());
+        let enemy = Player.on(this.opponent);
+        if !pass && enemy.state != 2.0 && enemy.jump_height <= 0.5 {
+            let other = this.opponent.transform.position.x;
+            if amount > 0.0 && old < other { next = min(next, other - 0.68); }
+            else if amount < 0.0 && old > other { next = max(next, other + 0.68); }
+        }
+        this.transform.position.x = clamp(next, -arena_limit(), arena_limit());
     }
 
     fn reset_round() {
         this.seen_round = Game.round;
-        this.balance = 100.0;
-        this.dodge_time = 0.0;
-        this.dodge_cooldown = 0.0;
-        this.hurt_time = 0.0;
-        this.hit_pause = 0.0;
-        this.knock_speed = 0.0;
-        this.paused_animation = false;
-        this.ai_wait = 0.65;
-        this.transform.position.x = 1.1;
-        if this.primary_controls { this.transform.position.x = -1.5; }
-        update_facing();
-        to_idle();
+        this.balance = 100.0; this.stamina = 100.0; this.regen_wait = 0.0;
+        this.state = 0.0; this.guarding = false; this.guard_age = 0.0; this.crouching = false;
+        this.jump_height = 0.0; this.jump_velocity = 0.0; this.air_attacked = false;
+        this.dodge_time = 0.0; this.dodge_cooldown = 0.0; this.hurt_time = 0.0; this.hit_pause = 0.0;
+        this.buffer = 0.0; this.buffer_time = 0.0; this.knock_speed = 0.0;
+        this.feedback_time = 0.0; this.ai_clock = 0.45; this.ai_choice = 0.0; this.ai_move = 0.0;
+        this.ai_guard = false; this.ai_crouch = false;
+        this.transform.position.x = 1.35; this.direction = -1.0;
+        if this.primary_controls { this.transform.position.x = -1.35; this.direction = 1.0; }
     }
 
-    fn update_layering() {
-        if this.opponent == null { return; }
-        // Root Y is the carpet contact point, independent of pose artwork.
-        // Lower world Y is closer to the viewer. Treat tiny differences as
-        // the same ground line, where the smaller fighter stays readable.
-        let ground_delta = this.transform.position.y - this.opponent.transform.position.y;
-        var in_front = ground_delta < -0.02;
-        if abs(ground_delta) <= 0.02 {
-            let height_delta = this.transform.scale.y - this.opponent.transform.scale.y;
-            in_front = height_delta < 0.0;
-            if height_delta == 0.0 { in_front = this.primary_controls; }
+    fn draw() {
+        var height = this.body_height;
+        if this.crouching { height *= 0.58; }
+        if this.balance <= 0.0 { height = 0.35; }
+        this.body.transform.scale.y = height * 0.65;
+        this.body.transform.position.y = this.jump_height + height * 0.38;
+        this.head.transform.position.y = this.jump_height + height * 0.85;
+        this.hand.transform.position.x = this.direction * 0.42;
+        this.hand.transform.position.y = this.jump_height + height * 0.6;
+        this.hand.transform.scale.x = 0.25;
+        var colour = Color(1.0, 0.08, 0.35, 1.0);
+        if !this.primary_controls { colour = Color(0.08, 0.35, 1.0, 1.0); }
+        if this.state == 3.0 { colour = Color(1.0, 0.85, 0.65, 1.0); }
+        if this.state == 2.0 { colour.a = 0.48; }
+        this.body.shape.fill = colour; this.head.shape.fill = colour;
+        World.set_active(this.zone, this.state == 1.0);
+        this.zone.transform.scale.x = this.reach;
+        this.zone.transform.position.x = this.direction * this.reach * 0.5;
+        this.zone.transform.position.y = this.jump_height + 0.95;
+        if this.attack_kind == 2.0 { this.zone.transform.position.y = 0.2; }
+        if this.attack_kind == 3.0 { this.zone.transform.position.y = 0.8 + this.jump_height * 0.25; }
+        this.zone.shape.fill = Color(1.0, 0.60, 0.02, 0.12);
+        this.zone.shape.stroke = Color(1.0, 0.65, 0.06, 0.9);
+        if this.attack_elapsed >= this.startup + 0.10 { this.zone.shape.fill = Color(0.3, 0.3, 0.3, 0.05); this.zone.shape.stroke.a = 0.25; }
+        else if this.attack_elapsed >= this.startup {
+            this.zone.shape.fill = Color(1.0, 0.13, 0.02, 0.65);
+            this.hand.transform.position.x = this.direction * this.reach;
         }
-        var layer = 10.0;
-        if in_front { layer = 11.0; }
-        if layer == this.draw_layer { return; }
-        this.draw_layer = layer;
-        // Set every pose so switching or interrupting clips cannot undo order.
-        // Shadow taps keep their separate layer 5 beneath both fighters.
-        this.idle_left.sprite.layer = layer;
-        this.idle_right.sprite.layer = layer;
-        this.move_left.sprite.layer = layer;
-        this.move_right.sprite.layer = layer;
-        this.turn.sprite.layer = layer;
-        this.attack_left.sprite.layer = layer;
-        this.attack_right.sprite.layer = layer;
-    }
-
-    fn update_facing() {
-        if this.opponent != null {
-            let separation = this.opponent.transform.position.x - this.transform.position.x;
-            if separation > 0.0 { this.facing_right = true; }
-            else if separation < 0.0 { this.facing_right = false; }
-        }
-    }
-
-    fn begin_loop(move_x: f32) {
-        let backwards = (move_x < 0.0 && this.facing_right)
-            || (move_x > 0.0 && !this.facing_right);
-        if this.state == 2.0 && backwards == this.walking_backwards { return; }
-        this.state = 2.0;
-        this.walking_backwards = backwards;
-        if this.facing_right {
-            if backwards { show(this.move_right, "back_right"); }
-            else { show(this.move_right, "move_right"); }
-        } else {
-            if backwards { show(this.move_left, "back_left"); }
-            else { show(this.move_left, "move_left"); }
-        }
-    }
-
-    fn to_idle() {
-        this.state = 0.0;
-        if this.facing_right { show(this.idle_right, "idle_right"); }
-        else { show(this.idle_left, "idle_left"); }
-    }
-
-    fn show(entity: Entity, clip: String) {
-        if this.shown != null {
-            this.shown.sprite.color_offset = Color(0.0, 0.0, 0.0, 0.0);
-            this.shown.sprite.tint = Color(1.0, 1.0, 1.0, 1.0);
-            World.set_active(this.shown, false);
-        }
-        this.shown = entity;
-        World.set_active(entity, true);
-        Animation.play(entity, clip);
-        Animation.restart(entity);
-        Animation.set_speed(entity, 1.0);
-
-        // The projected silhouettes use this pose's sheet and clock. Their
-        // parent controls visibility, so hiding the pose hides its shadow too.
-        var shadow_name = this.fighter_name + " Shadow " + clip;
-        if entity == this.move_left { shadow_name = this.fighter_name + " Shadow move_left"; }
-        if entity == this.move_right { shadow_name = this.fighter_name + " Shadow move_right"; }
-        if entity == this.turn { shadow_name = this.fighter_name + " Shadow turn"; }
-        this.shown_shadow = shadow_name;
-        for i in 0..9 {
-            let shadow = World.find(shadow_name + " " + i);
-            Animation.play(shadow, clip);
-            Animation.restart(shadow);
-            Animation.set_speed(shadow, 1.0);
-        }
+        World.set_active(this.shield, this.guarding);
+        this.shield.transform.position.y = height * 0.55;
+        this.shield.transform.scale.y = height * 1.1;
+        this.shield.shape.stroke = Color(0.0, 0.8, 1.0, 0.85);
+        if this.guard_age <= 0.085 { this.shield.shape.stroke = Color(1.0, 1.0, 1.0, 1.0); }
+        this.shadow.transform.scale.x = 0.9 / (1.0 + this.jump_height * 0.2);
+        this.shadow.shape.fill.a = 0.35 / (1.0 + this.jump_height);
     }
 }
