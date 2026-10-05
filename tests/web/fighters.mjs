@@ -94,6 +94,18 @@ try {
       const shift = pinkCentre(after) - pinkCentre(before);
       console.log(name + ': visible Agnes clothing shifted right ' + shift.toFixed(2) + ' pixels');
       assert(shift > 4, name + ': held right must visibly translate Agnes');
+      // Capture both overlaps after releasing input so slow screenshots cannot
+      // walk Agnes out of the portrait crop. Native tests assert all pose layers.
+      await page.keyboard.down('d');
+      await page.waitForTimeout(120);
+      await page.keyboard.up('d');
+      await page.waitForTimeout(180);
+      await canvas.screenshot({ path: out + '/' + name + '-overlap-left.png' });
+      await page.keyboard.down('d');
+      await page.waitForTimeout(300);
+      await page.keyboard.up('d');
+      await page.waitForTimeout(180);
+      await canvas.screenshot({ path: out + '/' + name + '-overlap-right.png' });
       await page.keyboard.down('a');
       await page.waitForTimeout(220);
       await canvas.screenshot({ path: out + '/' + name + '-retreat.png' });

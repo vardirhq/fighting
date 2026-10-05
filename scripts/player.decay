@@ -5,6 +5,7 @@ script Player {
     @export let primary_controls: bool = true;
     @export let starts_facing_right: bool = true;
     var facing_right: bool = true;
+    var draw_layer: f32 = -1.0;
     var opponent: Entity = null;
     var walking_backwards: bool = false;
     var state: f32 = 0.0;
@@ -44,10 +45,12 @@ script Player {
         this.attack_button = World.find("Attack Button");
         this.step_dust = World.find("Step Dust");
         this.attack_sparks = World.find("Attack Sparks");
+        update_layering();
         to_idle();
     }
 
     fn update(dt: f32) {
+        update_layering();
         this.step_cooldown = max(0.0, this.step_cooldown - dt);
         var move_x = Input.axis("J", "L");
         if this.primary_controls {
@@ -140,6 +143,37 @@ script Player {
         } else if this.state == 2.0 {
             begin_stop();
         }
+    }
+
+    fn update_layering() {
+        if this.opponent == null { return; }
+        // Root Y is the carpet contact point, independent of pose artwork.
+        // Lower world Y is closer to the viewer. Treat tiny differences as
+        // the same ground line, where the smaller fighter stays readable.
+        let ground_delta = this.transform.position.y - this.opponent.transform.position.y;
+        var in_front = ground_delta < -0.02;
+        if abs(ground_delta) <= 0.02 {
+            let height_delta = this.transform.scale.y - this.opponent.transform.scale.y;
+            in_front = height_delta < 0.0;
+            if height_delta == 0.0 { in_front = this.primary_controls; }
+        }
+        var layer = 10.0;
+        if in_front { layer = 11.0; }
+        if layer == this.draw_layer { return; }
+        this.draw_layer = layer;
+        // Set every pose so switching or interrupting clips cannot undo order.
+        // Shadow taps keep their separate layer 5 beneath both fighters.
+        this.idle_left.sprite.layer = layer;
+        this.idle_right.sprite.layer = layer;
+        this.start_left.sprite.layer = layer;
+        this.start_right.sprite.layer = layer;
+        this.move_left.sprite.layer = layer;
+        this.move_right.sprite.layer = layer;
+        this.stop_left.sprite.layer = layer;
+        this.stop_right.sprite.layer = layer;
+        this.turn.sprite.layer = layer;
+        this.attack_left.sprite.layer = layer;
+        this.attack_right.sprite.layer = layer;
     }
 
     fn update_facing() {
